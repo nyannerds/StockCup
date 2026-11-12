@@ -242,6 +242,17 @@ async function test(name, fn) { try { await fn(); passed++; console.log('  ok   
     const w = await fresh(); await skipGuide(w); await w.page.click('nav [data-page=more]'); await w.page.click('[data-act=speedCheck]'); await w.page.waitForFunction(() => /took \d+ ms/.test(document.getElementById('speedOut').textContent), null, { timeout: 30000 });
     const ms = Number((await w.page.locator('#speedOut').innerText()).match(/took (\d+) ms/)[1]); console.log('       in-browser calc time: ' + ms + ' ms'); assert.ok(ms < 1000); await w.ctx.close();
   });
+  await test('built-in recipes can be edited, flagged Edited, reset to original, and deleted/restored', async () => {
+    const w = await fresh(); await skipGuide(w); await w.page.click('nav [data-page=recipes]'); await w.page.click('[data-act=rview][data-v=all]');
+    await w.page.click('[data-act=viewRecipe][data-id=r_matcha_latte]'); await w.page.click('[data-act=rvEdit]');
+    await w.page.fill('input[name=i0_amount]', '3'); await w.page.click('[data-act=rfSave]');
+    let s = await state(w); let r = s.recipes.find((x) => x.id === 'r_matcha_latte'); assert.strictEqual(r.ingredients[0].amount, 3); assert.ok(r.builtin && r.edited); assert.strictEqual(s.recipes.length, 8);
+    assert.ok(/Edited/.test(await w.page.locator('#app').innerText()));
+    await w.page.click('[data-act=viewRecipe][data-id=r_matcha_latte]'); await w.page.click('[data-act=rvReset]'); await w.page.click('[data-act=confirmYes]');
+    r = (await state(w)).recipes.find((x) => x.id === 'r_matcha_latte'); assert.strictEqual(r.ingredients[0].amount, 2); assert.ok(!r.edited);
+    await w.page.click('[data-act=rvDel]'); await w.page.click('[data-act=confirmYes]'); assert.strictEqual((await state(w)).recipes.length, 7);
+    await w.page.click('nav [data-page=more]'); await w.page.click('[data-act=restoreBuiltins]'); assert.strictEqual((await state(w)).recipes.length, 8); await w.ctx.close();
+  });
   await test('step timer starts and shows a countdown bar', async () => {
     const w = await fresh(); await skipGuide(w); await w.page.click('nav [data-page=recipes]'); await w.page.click('[data-act=rview][data-v=all]'); await w.page.click('[data-act=viewRecipe][data-id=r_matcha_latte]'); await w.page.click('[data-act=stepTimer] >> nth=0'); await w.page.click('[data-act=closeSheet]');
     assert.ok(await w.page.locator('#timerbar').count()); assert.ok(/\d:\d\d/.test(await w.page.locator('#timerval').innerText())); await w.page.click('[data-act=timerStop]'); assert.strictEqual(await w.page.locator('#timerbar').count(), 0); await w.ctx.close();

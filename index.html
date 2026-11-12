@@ -1755,7 +1755,7 @@ VIEWS.recipes = () => {
     if (!shown.length) h += '<div class="empty">No recipes match these filters.</div>';
     shown.forEach((r) => {
       const k = seen[r.id]; const badge = { ready: '<span class="badge ok">Ready now</span>', maybe: '<span class="badge warn">Maybe</span>', almost: '<span class="badge warn">Almost</span>', no: '<span class="badge">Missing items</span>', needsDF: '<span class="badge warn">Needs a dairy-free product</span>' }[k];
-      h += '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row top"><div class="grow"><h3>' + esc(r.name) + (r.builtin ? '' : ' <span class="badge">Mine</span>') + '</h3><div>' + recipeBadges(r) + ' ' + badge + '</div><div class="small muted" style="margin-top:4px">' + esc(ingSummary(r)) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '">Log</button></div></div>';
+      h += '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row top"><div class="grow"><h3>' + esc(r.name) + (r.builtin ? (r.edited ? ' <span class="badge">Edited</span>' : '') : ' <span class="badge">Mine</span>') + '</h3><div>' + recipeBadges(r) + ' ' + badge + '</div><div class="small muted" style="margin-top:4px">' + esc(ingSummary(r)) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '">Log</button></div></div>';
     });
     return h;
   }
@@ -2307,7 +2307,7 @@ SHEETS.recipe = (d) => {
   if (a.status === 'ready' && a.makeable > 1) b += '<div class="okbox">The pantry covers about ' + a.makeable + ' servings of this.</div>';
   b += '<h2>Steps</h2><div class="card">' + (r.steps.length ? r.steps.map((s, i) => { const sec = stepSeconds(s); return '<div class="step"><span class="n">' + (i + 1) + '</span><div class="grow">' + esc(s) + (sec ? '<div><button class="small" data-act="stepTimer" data-sec="' + sec + '" data-label="' + esc(r.name) + ' · step ' + (i + 1) + '">⏱ Start ' + clock(sec) + ' timer</button></div>' : '') + '</div></div>'; }).join('') : '<span class="muted">No steps.</span>') + '</div>';
   if (r.sourceLink) b += '<p class="small muted">Source (saved as a note): ' + esc(r.sourceLink) + '</p>';
-  b += '<div class="grid2" style="margin-top:10px"><button data-act="rvFav" data-id="' + r.id + '">' + (r.fav ? '★ Unfavorite' : '☆ Favorite') + '</button><button data-act="rvDup" data-id="' + r.id + '">⧉ Duplicate</button>' + (r.builtin ? '' : '<button data-act="rvEdit" data-id="' + r.id + '">✏️ Edit</button><button class="danger" data-act="rvDel" data-id="' + r.id + '">Delete</button>') + '</div>';
+  b += '<div class="grid2" style="margin-top:10px"><button data-act="rvFav" data-id="' + r.id + '">' + (r.fav ? '★ Unfavorite' : '☆ Favorite') + '</button><button data-act="rvDup" data-id="' + r.id + '">⧉ Duplicate</button>' + '<button data-act="rvEdit" data-id="' + r.id + '">✏️ Edit</button>' + (r.builtin && r.edited ? '<button data-act="rvReset" data-id="' + r.id + '">↺ Reset to original</button>' : '') + '<button class="danger" data-act="rvDel" data-id="' + r.id + '">Delete</button></div>' + (r.builtin ? '<p class="small muted">Built-in recipes can be edited or deleted. “Restore built-in recipes” in More brings back deleted ones.</p>' : '');
   return { title: r.name, body: b, footer: '<button data-act="openScale" data-id="' + r.id + '">⚖ Scale</button><button class="primary" data-act="logRecipe" data-id="' + r.id + '">Log this drink</button>' };
 };
 ACT.rvServ = (el) => { const d = SHEET.data; d.servings = Math.max(1, Math.min(50, d.servings + Number(el.dataset.d))); renderSheet(); };
@@ -2315,6 +2315,7 @@ ACT.stepTimer = (el) => { startTimer(Number(el.dataset.sec), el.dataset.label); 
 ACT.rvFav = (el) => mutate((s) => { const r = s.recipes.find((x) => x.id === el.dataset.id); r.fav = !r.fav; });
 ACT.rvDup = (el) => { const r = S.recipes.find((x) => x.id === el.dataset.id); const c = SC.clone(r); c.id = SC.uid(); c.name = r.name + ' (copy)'; c.builtin = false; c.fav = false; mutate((s) => { s.recipes.push(c); }); openRecipeForm(c.id); toast('Duplicated. Edit your copy.'); };
 ACT.rvEdit = (el) => openRecipeForm(el.dataset.id);
+ACT.rvReset = (el) => confirmDialog('Put this recipe back to its original version? Your changes to it will be lost.', 'Reset', () => { mutate((s) => { const i = s.recipes.findIndex((r) => r.id === el.dataset.id); const orig = SC.builtinRecipes().find((r) => r.id === el.dataset.id); if (i >= 0 && orig) { orig.fav = s.recipes[i].fav; s.recipes[i] = orig; } }); openSheet('recipe', { id: el.dataset.id, servings: 1 }); toast('Recipe reset.'); }, true);
 ACT.rvDel = (el) => { const r = S.recipes.find((x) => x.id === el.dataset.id); confirmDialog('Delete “' + r.name + '”? Drinks already logged keep their record.', 'Delete', () => { mutate((s) => { s.recipes = s.recipes.filter((x) => x.id !== r.id); }); closeSheet(); toast('Recipe deleted.'); }, true); };
 
 // ---------- scaling ----------
@@ -2385,7 +2386,7 @@ ACT.rfSave = () => {
   syncRecipeForm(); const d = SHEET.data; const f = d.d;
   const res = SCP.draftToRecipe({ id: d.id, name: f.name, serve: f.serve, servings: f.servings, fav: f.fav, ingredients: f.ingredients, waterMl: f.waterMl, waterTemp: f.waterTemp, ice: f.ice, steps: String(f.steps).split('\n'), note: f.note, sourceLink: f.sourceLink });
   if (!res.ok) { d.errors = res.errors; renderSheet(); const body = $('#overlay .body'); if (body) body.scrollTop = 0; return; }
-  mutate((s) => { const i = s.recipes.findIndex((r) => r.id === res.recipe.id); if (i >= 0) { res.recipe.builtin = false; s.recipes[i] = res.recipe; } else s.recipes.push(res.recipe); });
+  mutate((s) => { const i = s.recipes.findIndex((r) => r.id === res.recipe.id); if (i >= 0) { if (s.recipes[i].builtin) { res.recipe.builtin = true; res.recipe.edited = true; } s.recipes[i] = res.recipe; } else s.recipes.push(res.recipe); });
   closeSheet(); toast('Saved ' + res.recipe.name + '.');
 };
 

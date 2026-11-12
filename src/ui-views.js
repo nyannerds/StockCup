@@ -125,7 +125,7 @@ VIEWS.recipes = () => {
     if (!shown.length) h += '<div class="empty">No recipes match these filters.</div>';
     shown.forEach((r) => {
       const k = seen[r.id]; const badge = { ready: '<span class="badge ok">Ready now</span>', maybe: '<span class="badge warn">Maybe</span>', almost: '<span class="badge warn">Almost</span>', no: '<span class="badge">Missing items</span>', needsDF: '<span class="badge warn">Needs a dairy-free product</span>' }[k];
-      h += '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row top"><div class="grow"><h3>' + esc(r.name) + (r.builtin ? '' : ' <span class="badge">Mine</span>') + '</h3><div>' + recipeBadges(r) + ' ' + badge + '</div><div class="small muted" style="margin-top:4px">' + esc(ingSummary(r)) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '">Log</button></div></div>';
+      h += '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row top"><div class="grow"><h3>' + esc(r.name) + (r.builtin ? (r.edited ? ' <span class="badge">Edited</span>' : '') : ' <span class="badge">Mine</span>') + '</h3><div>' + recipeBadges(r) + ' ' + badge + '</div><div class="small muted" style="margin-top:4px">' + esc(ingSummary(r)) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '">Log</button></div></div>';
     });
     return h;
   }
