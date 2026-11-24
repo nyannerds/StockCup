@@ -33,6 +33,8 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 
 ## Design notes
 
+* Navigation: four tabs (Home, Pantry, Recipes, Profile). Home has the search bar, the notification bell (descale, aging, low stock, recount alerts), Log a drink / Same as last time, Daily Insights tiles (tap for the log and history) and a filterable "Ready now" list. Profile holds people, machines, shopping list, guest plan, limits, appearance and data.
+
 * Recipes use generic ingredient types; stock is specific products. Water and ice are never tracked.
 * `espresso` slots are in shots and are filled by compatible capsules (rounded up per drink) or coffee beans (9 g per shot, editable).
 * Dairy-free comes from the products used plus each product's user-entered "contains dairy" flag (not allergy advice).

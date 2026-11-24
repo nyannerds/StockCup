@@ -77,7 +77,7 @@ function freshBadge(p) {
 const levelLabel = { none: 'No caffeine', low: 'Low caffeine', medium: 'Medium caffeine', high: 'High caffeine' };
 
 // ---------- router ----------
-const PAGES = { home: 'home', pantry: 'pantry', recipes: 'recipes', history: 'history', more: 'more', shopping: 'more', plan: 'more' };
+const PAGES = { home: 'home', pantry: 'pantry', recipes: 'recipes', history: 'more', more: 'more', shopping: 'more', plan: 'more' };
 function go(page) {
   UI.page = page; closeSheet(); render(); window.scrollTo(0, 0);
   if (location.hash !== '#/' + page) { try { history.pushState(null, '', '#/' + page); } catch (e) { location.hash = '#/' + page; } }
@@ -86,16 +86,36 @@ function routeFromHash() { const m = location.hash.match(/^#\/(\w+)/); UI.page =
 window.addEventListener('popstate', () => { routeFromHash(); closeSheet(); render(); window.scrollTo(0, 0); });
 window.addEventListener('hashchange', () => { routeFromHash(); closeSheet(); render(); window.scrollTo(0, 0); });
 
+const ICON = {
+  home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></svg>',
+  pantry: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="9" width="14" height="12" rx="3"/><path d="M8 9V6h8v3"/><path d="M5 14.5h14"/><path d="M9 3.5h6"/></svg>',
+  recipes: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 8h6M9 11.5h4"/></svg>',
+  profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c.8-3.6 4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg>',
+  search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21h4"/></svg>',
+  filter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
+  cup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 10.500h1.500a2.5 2.5 0 0 1 0 5H16.5"/><path d="M9 3.500c-1 1 1 2-.1 3.500M13 3.500c-1 1 1 2-.1 3.5"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-4.500L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14 4.500L20 15"/><path d="M20 20v-5h-5"/></svg>',
+  logo: '<svg viewBox="0 0 44 38" aria-hidden="true"><path d="M8 14h24v8a11 11 0 0 1-11 11h-2A11 11 0 0 1 8 22z" fill="#fffaea" stroke="#fffaea"/><path d="M32 16h2.500a4.5 4.5 0 0 1 0 9H31" fill="none" stroke="#fffaea" stroke-width="2.5"/><path d="M15 6c-2 2 2 4 0 6M22 6c-2 2 2 4 0 6" fill="none" stroke="#ffb347" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="23" r="1.3" fill="#4f7339"/><circle cx="25" cy="23" r="1.3" fill="#4f7339"/><path d="M18.5 26q2 2 4 0" fill="none" stroke="#4f7339" stroke-width="1.4" stroke-linecap="round"/></svg>',
+};
 function navHtml() {
   const low = SC.lowStock(S).length + S.shopping.length;
-  const tabs = [['home', '🏠', 'Home'], ['pantry', '🫙', 'Pantry'], ['recipes', '📖', 'Recipes'], ['history', '📊', 'Log'], ['more', '⚙️', 'More']];
-  return '<nav class="nav" aria-label="Main"><div>' + tabs.map((t) => '<button data-act="go" data-page="' + t[0] + '"' + (PAGES[UI.page] === t[0] ? ' aria-current="page"' : '') + '><span class="ic" aria-hidden="true">' + t[1] + '</span>' + t[2] + (t[0] === 'more' && low ? '<span class="dot" aria-label="' + low + ' to buy">' + low + '</span>' : '') + '</button>').join('') + '</div></nav>';
+  const tabs = [['home', 'home', 'Home'], ['pantry', 'pantry', 'Pantry'], ['recipes', 'recipes', 'Recipes'], ['more', 'profile', 'Profile']];
+  return '<nav class="nav" aria-label="Main"><div>' + tabs.map((t) => '<button data-act="go" data-page="' + t[0] + '"' + (PAGES[UI.page] === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[1]] + t[2] + (t[0] === 'more' && low ? '<span class="dot" aria-label="' + low + ' to buy">' + low + '</span>' : '') + '</button>').join('') + '</div></nav>';
 }
-function topbar(title, extra) {
-  const ppl = S.people.length;
-  return '<div class="topbar"><h1>' + esc(title) + '</h1>' + (extra || '') +
-    '<button class="small" data-act="nextPerson" aria-label="Active person: ' + esc(activePerson().name) + (ppl > 1 ? '. Tap to switch.' : '') + '">👤 ' + esc(activePerson().name) + '</button></div>' +
-    (storageNote ? '<div class="alert bad" role="alert">' + esc(storageNote) + '</div>' : '') + timerHtml();
+function avatarBtn() {
+  const p = activePerson();
+  return '<button class="avatar" data-act="nextPerson" aria-label="Active person: ' + esc(p.name) + (S.people.length > 1 ? '. Tap to switch.' : '. Open profile.') + '">' + esc((p.name.trim().charAt(0) || '?').toUpperCase()) + '</button>';
+}
+// Page header. home=true gives the full header (logo, search, welcome, bell); otherwise a compact title bar.
+function hero(title, extra, home) {
+  const notes = (storageNote ? '<div class="alert bad" role="alert">' + esc(storageNote) + '</div>' : '') + timerHtml();
+  if (home) {
+    const n = alertCount();
+    return '<header class="hero"><div class="hero-top"><div class="logo">' + ICON.logo + '<span>StockCup</span></div><button class="searchbar" data-act="openSearch" aria-label="Search pantry and recipes"><span>Search here …</span>' + ICON.search + '</button></div>' +
+      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span></div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
+  }
+  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div></header>' + notes;
 }
 
 // In-place DOM reconciliation: keeps the same elements (and focus) so a tap is never lost to a re-render.

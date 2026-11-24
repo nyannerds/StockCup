@@ -162,7 +162,7 @@ async function test(name, fn) { try { await fn(); passed++; console.log('  ok   
   });
   await test('works with the network off and makes no outside requests', async () => {
     const w = await fresh(); await w.ctx.setOffline(true); await skipGuide(w); await w.page.click('[data-act=loadSample]');
-    for (const pg of ['pantry', 'recipes', 'history', 'more', 'home']) { await w.page.click('nav [data-page=' + pg + ']'); }
+    for (const pg of ['pantry', 'recipes', 'more', 'home']) { await w.page.click('nav [data-page=' + pg + ']'); } await w.page.click('[data-act=go][data-page=history]:visible >> nth=0'); await w.page.click('nav [data-page=home]');
     await w.page.click('[data-act=logSame]'); await w.page.click('[data-act=logSubmit]'); assert.ok((await state(w)).logs.length > 6);
     assert.strictEqual(external.length, 0, external.join(',')); await w.ctx.close();
   });
@@ -178,8 +178,10 @@ async function test(name, fn) { try { await fn(); passed++; console.log('  ok   
     await w.page.click('#overlay [data-act=logRecipe][data-id=r_espresso_tonic]'); const opts = await w.page.locator('#overlay select[name="p-0-0"] option').allInnerTexts(); assert.ok(opts.some((o) => /OrigCap/.test(o)) && !opts.some((o) => /VertCap/.test(o))); await w.ctx.close();
   });
   await test('descale reminder appears for the machine past its limit and clears with Done', async () => {
-    const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]'); assert.ok(/Descale Sample Original machine/.test(await w.page.locator('#app').innerText()));
-    await w.page.click('[data-act=descaled]'); assert.ok(!/Descale Sample Original machine/.test(await w.page.locator('#app').innerText())); await w.ctx.close();
+    const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]');
+    const badge = Number(await w.page.locator('.iconbtn .count').innerText()); assert.ok(badge >= 2, 'bell badge counts alerts: ' + badge);
+    await w.page.click('[data-act=openBell]'); assert.strictEqual(await w.page.locator('#overlay .alert').count(), badge); assert.ok(/Descale Sample Original machine/.test(await w.page.locator('#overlay .body').innerText()));
+    await w.page.click('[data-act=descaled]'); assert.ok(!/Descale Sample Original machine/.test(await w.page.locator('#overlay .body').innerText())); assert.strictEqual(await w.page.locator('#overlay .alert').count(), badge - 1); await w.ctx.close();
   });
 
   console.log('R23 mobile layout and dark mode');
@@ -198,8 +200,8 @@ async function test(name, fn) { try { await fn(); passed++; console.log('  ok   
   }
   await test('no horizontal scroll and 44px targets on every page and sheet at 360 px', async () => {
     const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]'); let bad = [];
-    for (const pg of pages) { await w.page.click('nav [data-page=' + (pg === 'shopping' || pg === 'plan' ? 'more' : pg) + ']'); if (pg === 'shopping' || pg === 'plan') await w.page.click('[data-act=go][data-page=' + pg + ']'); await w.page.waitForTimeout(80); bad = bad.concat(await audit(w, pg)); await w.page.screenshot({ path: path.join(SHOTS, 'page-' + pg + '.png'), fullPage: true }); }
-    const sheets = [['recipes', '[data-act=viewRecipe]', 'recipe'], ['pantry', '[data-act=viewProduct]', 'product detail'], ['home', '[data-act=logPick]', 'log picker']];
+    for (const pg of pages) { await w.page.click('nav [data-page=' + (pg === 'shopping' || pg === 'plan' || pg === 'history' ? 'more' : pg) + ']'); if (pg === 'shopping' || pg === 'plan' || pg === 'history') await w.page.click('[data-act=go][data-page=' + pg + ']'); await w.page.waitForTimeout(80); bad = bad.concat(await audit(w, pg)); await w.page.screenshot({ path: path.join(SHOTS, 'page-' + pg + '.png'), fullPage: true }); }
+    const sheets = [['recipes', '[data-act=viewRecipe]', 'recipe'], ['pantry', '[data-act=viewProduct]', 'product detail'], ['home', '[data-act=logPick]', 'log picker'], ['home', '[data-act=openBell]', 'notifications'], ['home', '[data-act=openFilters]', 'filters'], ['home', '[data-act=openSearch]', 'search']];
     for (const [pg, sel, label] of sheets) { await w.page.click('nav [data-page=' + pg + ']'); await w.page.click(sel + ':visible >> nth=0'); await w.page.waitForTimeout(250); bad = bad.concat(await audit(w, label)); await w.page.screenshot({ path: path.join(SHOTS, 'sheet-' + label.replace(/ /g, '-') + '.png') }); await w.page.click('[data-act=closeSheet]'); }
     await w.page.click('nav [data-page=home]'); await w.page.click('[data-act=logPick]'); await w.page.click('#overlay [data-act=logRecipe][data-id=r_flat_white]'); await w.page.waitForTimeout(250); bad = bad.concat(await audit(w, 'log sheet')); await w.page.screenshot({ path: path.join(SHOTS, 'sheet-log.png') }); await w.page.click('[data-act=closeSheet]');
     await w.page.click('nav [data-page=pantry]'); await w.page.click('[data-act=addMenu]'); await w.page.click('[data-act=newProduct]'); await w.page.waitForTimeout(250); bad = bad.concat(await audit(w, 'product form')); await w.page.screenshot({ path: path.join(SHOTS, 'sheet-product-form.png') });
@@ -210,11 +212,31 @@ async function test(name, fn) { try { await fn(); passed++; console.log('  ok   
     assert.strictEqual(await w.page.evaluate(() => document.documentElement.getAttribute('data-theme')), 'dark'); await w.page.reload(); await w.page.waitForTimeout(100);
     assert.strictEqual(await w.page.evaluate(() => document.documentElement.getAttribute('data-theme')), 'dark');
     const bg = await w.page.evaluate(() => getComputedStyle(document.body).backgroundColor); const rgb = bg.match(/\d+/g).map(Number); assert.ok(rgb[0] < 60 && rgb[1] < 60, bg);
-    for (const pg of ['home', 'pantry', 'recipes', 'history', 'more']) { await w.page.click('nav [data-page=' + pg + ']'); await w.page.screenshot({ path: path.join(SHOTS, 'dark-' + pg + '.png') }); }
+    for (const pg of ['home', 'pantry', 'recipes', 'more']) { await w.page.click('nav [data-page=' + pg + ']'); await w.page.screenshot({ path: path.join(SHOTS, 'dark-' + pg + '.png') }); }
     await w.ctx.close();
     const lw = await fresh({ colorScheme: 'dark' }); await skipGuide(lw); assert.ok((await lw.page.evaluate(() => getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number)[0])) < 60, 'follows OS dark'); await lw.ctx.close();
   });
 
+  console.log('Redesign: navigation, search, filters');
+  await test('bottom bar has 4 tabs (Home, Pantry, Recipes, Profile) and Log/insights opens from the Home tile', async () => {
+    const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]');
+    assert.deepStrictEqual(await w.page.locator('nav button').allInnerTexts().then((a) => a.map((t) => t.replace(/\d+$/, '').trim())), ['Home', 'Pantry', 'Recipes', 'Profile']);
+    await w.page.click('.insights [data-page=history]:visible >> nth=0'); assert.ok(/Caffeine, last 7 days/.test(await w.page.locator('#app').innerText()));
+    assert.strictEqual(await w.page.locator('nav [aria-current=page]').innerText().then((t) => t.trim()), 'Profile'); await w.ctx.close();
+  });
+  await test('header search finds recipes and pantry products and opens them', async () => {
+    const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]'); await w.page.click('[data-act=openSearch]');
+    assert.ok(await w.page.evaluate(() => document.activeElement && document.activeElement.id === 'searchInput'), 'input focused'); await w.page.fill('#searchInput', 'matcha');
+    const t = await w.page.locator('#searchResults').innerText(); assert.ok(/Matcha latte/.test(t) && /Ceremonial matcha/.test(t), t);
+    await w.page.fill('#searchInput', 'zzzz'); assert.ok(/Nothing found/.test(await w.page.locator('#searchResults').innerText()));
+    await w.page.fill('#searchInput', 'ceremonial'); await w.page.click('#searchResults [data-act=viewProduct]'); assert.ok(/Ceremonial matcha/.test(await w.page.locator('#overlay header').innerText())); await w.ctx.close();
+  });
+  await test('Home filter button narrows "Ready now" and Clear restores it', async () => {
+    const w = await fresh(); await skipGuide(w); await w.page.click('[data-act=loadSample]'); const n = () => w.page.locator('#app [data-act=viewRecipe]').count(); const all = await n();
+    await w.page.click('[data-act=openFilters]'); await w.page.click('#overlay [data-k=serve][data-v=hot]'); await w.page.click('[data-act=closeSheet]');
+    assert.ok(/Filters:\s*Hot/.test(await w.page.locator('#app').innerText())); const hot = await n(); assert.ok(hot < all, hot + ' < ' + all);
+    await w.page.click('#app [data-act=rfClear]'); assert.strictEqual(await n(), all); await w.ctx.close();
+  });
   console.log('R10/R11/R4 screens');
   await test('scale sheet and guest plan show hand-calculable numbers; plan leaves stock unchanged', async () => {
     const w = await fresh(); await skipGuide(w);

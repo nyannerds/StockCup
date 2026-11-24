@@ -336,3 +336,27 @@ ACT.machineSave = () => {
   mutate((s) => { if (d.id) { const m = s.machines.find((x) => x.id === d.id); Object.assign(m, { name: name, system: f.system, descaleCaps: dc.value, descaleMonths: dm.value, caps: caps, lastDescaled: last }); } else { const m = SC.makeMachine(name, f.system, today()); m.descaleCaps = dc.value; m.descaleMonths = dm.value; s.machines.push(m); } }); closeSheet();
 };
 ACT.machineDel = () => { const d = SHEET.data; confirmDialog('Remove this machine? Capsules that no longer fit any machine stop counting as stock (they are kept, just hidden).', 'Remove', () => { mutate((s) => { s.machines = s.machines.filter((m) => m.id !== d.id); }); closeSheet(); }, true); };
+
+// ---------- header sheets: search, notifications, filters ----------
+ACT.openSearch = () => { openSheet('search', { q: '' }); const i = $('#searchInput'); if (i) i.focus(); };
+function searchResultsHtml(q) {
+  q = q.trim().toLowerCase(); if (!q) return '<div class="empty muted">Type a product or recipe name.</div>';
+  const caps = SC.capsulesEnabled(S);
+  const prods = S.products.filter((p) => (p.category !== 'capsule' || caps) && (p.brand + ' ' + p.name + ' ' + catLabel(p.category)).toLowerCase().indexOf(q) >= 0).slice(0, 8);
+  const recs = S.recipes.filter((r) => r.name.toLowerCase().indexOf(q) >= 0).slice(0, 8);
+  if (!prods.length && !recs.length) return '<div class="empty">Nothing found for “' + esc(q) + '”.</div>';
+  return (recs.length ? '<h2>Recipes</h2>' + recs.map((r) => '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row"><div class="grow"><h3>' + esc(r.name) + '</h3><div>' + recipeBadges(r) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '" aria-label="Log ' + esc(r.name) + '">Log</button></div></div>').join('') : '') +
+    (prods.length ? '<h2>In your pantry</h2>' + prods.map(productCard).join('') : '');
+}
+SHEETS.search = (d) => ({ title: 'Search', body: '<input id="searchInput" type="search" data-input="searchQ" placeholder="Search pantry and recipes" aria-label="Search pantry and recipes" value="' + esc(d.q) + '" style="margin-top:8px"><div id="searchResults">' + searchResultsHtml(d.q) + '</div>' });
+INP.searchQ = (el) => { SHEET.data.q = el.value; $('#searchResults').innerHTML = searchResultsHtml(el.value); };
+ACT.openBell = () => openSheet('bell');
+SHEETS.bell = () => { const a = buildAlerts(); return { title: 'Notifications', body: a.length ? '<div style="margin-top:8px">' + a.join('') + '</div>' : '<div class="empty"><div class="big-ic">🌿</div><p>All clear. Nothing needs your attention.</p></div>' }; };
+ACT.openFilters = () => openSheet('filters');
+SHEETS.filters = () => {
+  const f = UI.rf; const chip = (k, v, label) => '<button class="chip" aria-pressed="' + (k === 'dairyFree' || k === 'fav' ? f[k] : f[k] === v) + '" data-act="rfilter" data-k="' + k + '" data-v="' + v + '">' + label + '</button>';
+  return { title: 'Filters', body: '<h2 style="margin-top:10px">Served</h2><div class="chips" style="flex-wrap:wrap">' + chip('serve', 'hot', '☕ Hot') + chip('serve', 'iced', '🧊 Iced') + '</div>' +
+    '<h2>Caffeine</h2><div class="chips" style="flex-wrap:wrap">' + chip('caf', 'none', 'No caffeine') + chip('caf', 'low', 'Low') + chip('caf', 'medium', 'Medium') + chip('caf', 'high', 'High') + '</div>' +
+    '<h2>Other</h2><div class="chips" style="flex-wrap:wrap">' + chip('dairyFree', '1', '🌱 Dairy-free') + chip('fav', '1', '★ Favorites') + '</div><p class="small muted">Dairy-free is worked out from the products you chose and each product’s “contains dairy” setting. It is not allergy advice.</p>',
+    footer: '<button data-act="rfClear">Clear all</button><button class="primary" data-act="closeSheet">Show recipes</button>' };
+};

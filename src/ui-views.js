@@ -25,10 +25,9 @@ function almostRow(a) {
 }
 
 // ---------- HOME ----------
-VIEWS.home = () => {
-  const t = today(), who = S.settings.activePerson; const sug = SC.suggest(S, {}, t); const last = SC.lastLogFor(S, who);
-  let h = topbar('StockCup');
-  const alerts = [];
+// Alerts shown in the bell sheet; the bell badge uses the same list.
+function buildAlerts() {
+  const t = today(); const alerts = [];
   S.machines.forEach((m) => {
     const d = SC.descaleStatus(m, t);
     if (d.due) alerts.push(alertBox('warn', '🧼 <b>Descale ' + esc(m.name) + '.</b> ' + (d.byCaps ? m.caps + ' capsules since the last descale (limit ' + m.descaleCaps + ').' : 'Last descaled more than ' + m.descaleMonths + ' months ago.') + ' <span class="muted small">(estimate)</span>', 'Done', 'descaled', m.id));
@@ -41,21 +40,32 @@ VIEWS.home = () => {
   const low = SC.lowStock(S);
   if (low.length) alerts.push(alertBox('warn', '🛒 <b>Running low:</b> ' + low.map((x) => esc(catLabel(x.type).toLowerCase()) + ' (' + fmt(x.total) + ' ' + x.unit + ')').join(', ') + '.', 'Shopping list', 'toShopping'));
   if (S.logs.length - S.settings.recountMark >= 20) alerts.push(alertBox('', '🔢 <b>' + (S.logs.length - S.settings.recountMark) + ' drinks logged since your last recount.</b> A quick look at the shelf keeps stock honest.', 'Not now', 'dismissRecount'));
-  h += alerts.join('');
+  return alerts;
+}
+const alertCount = () => buildAlerts().length;
+function filterLine() {
+  const f = UI.rf; const on = [];
+  if (f.serve) on.push(f.serve === 'iced' ? 'Iced' : 'Hot'); if (f.caf) on.push(levelLabel[f.caf]); if (f.dairyFree) on.push('Dairy-free'); if (f.fav) on.push('Favorites');
+  return on.length ? '<div class="filterline">Filters: <b>' + esc(on.join(' · ')) + '</b><button class="small ghost" data-act="rfClear">Clear</button></div>' : '';
+}
+VIEWS.home = () => {
+  const t = today(), who = S.settings.activePerson; const f = UI.rf; const filt = { serve: f.serve, caf: f.caf, dairyFree: f.dairyFree, fav: f.fav };
+  const all = SC.suggest(S, {}, t); const sug = SC.suggest(S, filt, t); const last = SC.lastLogFor(S, who);
+  let h = hero('', '', true);
   if (!S.products.filter((p) => p.category !== 'capsule' || SC.capsulesEnabled(S)).length) {
     h += '<div class="card"><div class="empty"><div class="big-ic">🍵</div><h2>Your pantry is empty</h2><p>Add a few products and StockCup will tell you what you can make, deduct stock when you log a drink and warn you before things go stale.</p></div><div class="stack">' +
       '<button class="primary big" data-act="openGuide">Take the 1-minute setup guide</button><button class="big" data-act="addPreset">Add from the starter list</button><button class="big" data-act="loadSample">Try the sample pantry</button></div></div>';
     return h;
   }
-  h += '<div class="grid2" style="margin-top:8px"><button class="primary big" data-act="logPick">☕ Log a drink</button><button class="big" data-act="logSame"' + (last ? '' : ' disabled') + '>↻ Same as last time</button></div>';
-  if (last) h += '<div class="small muted" style="margin:4px 2px">Last: ' + esc(last.name) + ' · ' + esc(fmtDT(last.ts)) + '</div>';
+  h += '<div class="actions"><button data-act="logPick">' + ICON.cup + 'Log a drink</button><button data-act="logSame"' + (last ? '' : ' disabled') + '>' + ICON.repeat + 'Same as last time</button></div>';
+  if (last) h += '<div class="small muted" style="margin:-4px 2px 6px">Last: ' + esc(last.name) + ' · ' + esc(fmtDT(last.ts)) + '</div>';
   const recents = []; S.logs.slice().sort((a, b) => (a.ts < b.ts ? 1 : -1)).forEach((l) => { if (l.personId === who && l.recipeId && recents.indexOf(l.recipeId) < 0 && S.recipes.some((r) => r.id === l.recipeId)) recents.push(l.recipeId); });
   if (recents.length) h += '<div class="chips" aria-label="Recent drinks">' + recents.slice(0, 5).map((id) => '<button class="chip" data-act="logRecipe" data-id="' + id + '">' + esc(S.recipes.find((r) => r.id === id).name) + '</button>').join('') + '</div>';
   const cafToday = SC.dayCaffeine(S, who, t);
-  h += '<div class="grid3" style="margin:10px 0"><div class="stat"><span class="small muted">Caffeine today (est.)</span><b>' + fmt(cafToday, 0) + ' mg</b></div><div class="stat"><span class="small muted">Drinks today</span><b>' + SC.logsFor(S, who).filter((l) => l.ts.slice(0, 10) === t).length + '</b></div><div class="stat"><span class="small muted">Can make now</span><b>' + sug.ready.length + '</b></div></div>';
-  h += '<h2>You can make now</h2>';
+  h += '<h2 style="margin-top:6px">Daily Insights</h2><div class="insights"><button data-act="go" data-page="history"><span class="l">Caffeine (est.)</span><b>' + fmt(cafToday, 0) + ' mg</b></button><button data-act="go" data-page="history"><span class="l">Drinks today</span><b>' + SC.logsFor(S, who).filter((l) => l.ts.slice(0, 10) === t).length + '</b></button><button data-act="seeMake"><span class="l">Can make now</span><b>' + all.ready.length + '</b></button></div>';
+  h += '<div class="sectionhead"><h2>Ready now</h2><button class="iconbtn plain" data-act="openFilters" aria-label="Filters">' + ICON.filter + '</button></div>' + filterLine();
   if (sug.ready.length) h += sug.ready.slice(0, 4).map((a) => recipeRow(a)).join('') + (sug.ready.length > 4 ? '<button class="big" data-act="seeMake">See all ' + sug.ready.length + '</button>' : '');
-  else h += '<div class="card muted">Nothing is fully covered right now. ' + (sug.almost.length ? 'See “almost there” below.' : 'Add more products to unlock recipes.') + '</div>';
+  else h += '<div class="card muted">Nothing is fully covered right now' + (filterLine() ? ' with these filters' : '') + '. ' + (sug.almost.length ? 'See “almost there” below.' : 'Add more products to unlock recipes.') + '</div>';
   if (sug.maybe.length) h += '<h2>Maybe (an amount is unknown)</h2>' + sug.maybe.slice(0, 3).map((a) => recipeRow(a, '<div class="small" style="color:var(--warn)">Recount to be sure.</div>')).join('');
   if (sug.useItUp.length) h += '<h2>Use it up</h2>' + sug.useItUp.slice(0, 3).map((u) => recipeRow(u.analysis, '<div class="small" style="color:var(--warn)">Uses ' + u.aged.map((x) => esc(SC.productLabel(x.p)) + (x.f.state === 'past' ? ' (past best)' : ' (open ' + x.f.days + ' d)')).join(', ') + '</div>')).join('');
   if (sug.almost.length) h += '<h2>Almost there</h2>' + sug.almost.slice(0, 3).map(almostRow).join('');
@@ -67,7 +77,7 @@ ACT.seeMake = () => { UI.rview = 'make'; go('recipes'); };
 ACT.dismissRecount = () => mutate((s) => { s.settings.recountMark = s.logs.length; });
 ACT.descaled = (el) => mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } });
 ACT.addMissing = (el, e) => { e.stopPropagation(); openProductForm({ category: el.dataset.cat }); };
-ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in More.'); };
+ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
 
 // ---------- PANTRY ----------
 function pantryItems() {
@@ -93,12 +103,12 @@ function pantryListHtml() {
   return items.map(productCard).join('');
 }
 VIEWS.pantry = () => {
-  let h = topbar('Pantry', '<button class="primary small" data-act="addMenu">＋ Add</button>');
+  let h = hero('Pantry', '<button class="primary small" data-act="addMenu">＋ Add</button>');
   h += '<input type="search" id="pantrySearch" data-input="pantryQ" placeholder="Search brand or name" aria-label="Search pantry" value="' + esc(UI.pantryQ) + '">';
   const cats = Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S));
   h += '<div class="chips" role="group" aria-label="Filter">' + [['all', 'All'], ['aging', '⏳ Aging']].concat(cats.map((c) => [c, catLabel(c)])).map((c) => '<button class="chip" aria-pressed="' + (UI.pantryCat === c[0]) + '" data-act="pantryCat" data-cat="' + c[0] + '">' + esc(c[1]) + '</button>').join('') + '</div>';
   h += '<div id="plist">' + pantryListHtml() + '</div>';
-  if (!SC.capsulesEnabled(S) && S.products.some((p) => p.category === 'capsule')) h += '<p class="small muted">Capsule products are hidden because no machine is set. Add one in More → Machines.</p>';
+  if (!SC.capsulesEnabled(S) && S.products.some((p) => p.category === 'capsule')) h += '<p class="small muted">Capsule products are hidden because no machine is set. Add one in Profile → Machines.</p>';
   return h;
 };
 INP.pantryQ = (el) => { UI.pantryQ = el.value; $('#plist').innerHTML = pantryListHtml(); };
@@ -106,14 +116,10 @@ ACT.pantryCat = (el) => { UI.pantryCat = el.dataset.cat; render(); };
 
 // ---------- RECIPES ----------
 function filterRow() {
-  const f = UI.rf;
-  return '<input type="search" data-input="rq" placeholder="Search recipes" aria-label="Search recipes" value="' + esc(f.q) + '">' +
-    '<div class="chips" role="group" aria-label="Filters">' +
-    [['serve', 'hot', '☕ Hot'], ['serve', 'iced', '🧊 Iced'], ['caf', 'none', 'No caffeine'], ['caf', 'low', 'Low'], ['caf', 'medium', 'Medium'], ['caf', 'high', 'High']].map((c) => '<button class="chip" aria-pressed="' + (f[c[0]] === c[1]) + '" data-act="rfilter" data-k="' + c[0] + '" data-v="' + c[1] + '">' + c[2] + '</button>').join('') +
-    '<button class="chip" aria-pressed="' + f.dairyFree + '" data-act="rfilter" data-k="dairyFree" data-v="1">🌱 Dairy-free</button><button class="chip" aria-pressed="' + f.fav + '" data-act="rfilter" data-k="fav" data-v="1">★ Favorites</button></div>';
+  return '<div class="row" style="margin:4px 0 6px"><input class="grow" type="search" data-input="rq" placeholder="Search recipes" aria-label="Search recipes" value="' + esc(UI.rf.q) + '"><button class="iconbtn plain" data-act="openFilters" aria-label="Filters">' + ICON.filter + '</button></div>' + filterLine();
 }
 VIEWS.recipes = () => {
-  let h = topbar('Recipes', '<button class="small" data-act="importRecipe">Import</button><button class="primary small" data-act="newRecipe">＋ New</button>');
+  let h = hero('Recipes', '<button class="small" data-act="importRecipe">Import</button><button class="primary small" data-act="newRecipe">＋ New</button>');
   h += '<div class="chips" role="group" aria-label="View"><button class="chip" aria-pressed="' + (UI.rview === 'make') + '" data-act="rview" data-v="make">What can I make?</button><button class="chip" aria-pressed="' + (UI.rview === 'all') + '" data-act="rview" data-v="all">All recipes</button></div>';
   h += filterRow();
   const f = UI.rf; const filt = { serve: f.serve, caf: f.caf, dairyFree: f.dairyFree, fav: f.fav, q: f.q };
@@ -146,7 +152,7 @@ INP.rq = (el) => { UI.rf.q = el.value; const pos = el.selectionStart; render(); 
 
 // ---------- LOG / INSIGHTS ----------
 VIEWS.history = () => {
-  let h = topbar('Log & insights');
+  let h = hero('Log & insights', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   const who = UI.hwho; const t = today();
   const opts = [['all', 'Household']].concat(S.people.map((p) => [p.id, p.name])); if (S.logs.some((l) => !l.personId)) opts.push(['none', 'Unassigned']);
   h += '<div class="chips" role="group" aria-label="Whose drinks">' + opts.map((o) => '<button class="chip" aria-pressed="' + (who === o[0]) + '" data-act="hwho" data-v="' + o[0] + '">' + esc(o[1]) + '</button>').join('') + '</div>';
@@ -186,7 +192,7 @@ ACT.undoAdj = (el) => { SC.undoAdjustment(S, el.dataset.id); save(); render(); t
 
 // ---------- SHOPPING ----------
 VIEWS.shopping = () => {
-  let h = topbar('Shopping list', '<button class="small" data-act="go" data-page="more">‹ More</button>');
+  let h = hero('Shopping list', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   const low = SC.lowStock(S);
   h += '<p class="muted small">Items appear when the total across all brands is at or below the low-stock limit you set in More.</p>';
   if (!low.length && !S.shopping.length) h += '<div class="empty"><div class="big-ic">🛒</div><p>Nothing to buy right now.</p></div>';
@@ -210,7 +216,7 @@ SUB.addShop = (f) => { const v = formData(f).label.trim(); if (!v) { toast('Type
 // ---------- GUEST PLAN ----------
 UI.plan = [];
 VIEWS.plan = () => {
-  let h = topbar('Guest plan', '<button class="small" data-act="go" data-page="more">‹ More</button>');
+  let h = hero('Guest plan', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   h += '<p class="muted small">Check whether the pantry covers a round of drinks. Planning never changes your stock.</p>';
   UI.plan = UI.plan.filter((p) => S.recipes.some((r) => r.id === p.recipeId));
   UI.plan.forEach((p, i) => {
@@ -241,8 +247,9 @@ ACT.planToShop = () => {
 // ---------- MORE ----------
 VIEWS.more = () => {
   const lowN = SC.lowStock(S).length + S.shopping.length;
-  let h = topbar('More');
-  h += '<div class="grid2"><button class="big" data-act="go" data-page="shopping">🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</button><button class="big" data-act="go" data-page="plan">🎉 Guest plan</button></div>';
+  let h = hero('Profile');
+  h += '<div class="profilecard">' + avatarBtn().replace('data-act="nextPerson"', 'data-act="nextPerson"') + '<div class="grow"><b style="font:700 1.25rem var(--display)">' + esc(activePerson().name) + '</b><div class="small" style="opacity:.92">Active person · tap the circle to switch</div></div></div>';
+  h += '<div class="linkrows"><button data-act="go" data-page="history"><span>📊 Log & insights</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="shopping"><span>🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="plan"><span>🎉 Guest plan</span><span aria-hidden="true">›</span></button></div>';
   h += '<h2>People</h2><div class="card"><p class="small muted">Names only, no logins. Stock is shared; each drink is tagged with who had it.</p>' + S.people.map((p) =>
     '<div class="row"><div class="grow">' + (p.id === S.settings.activePerson ? '<b>' + esc(p.name) + '</b> <span class="badge acc">active</span>' : esc(p.name)) + '</div>' + (p.id === S.settings.activePerson ? '' : '<button class="small" data-act="setPerson" data-id="' + p.id + '">Use</button>') + '<button class="small" data-act="renamePerson" data-id="' + p.id + '">Rename</button><button class="small danger" data-act="delPerson" data-id="' + p.id + '" aria-label="Delete ' + esc(p.name) + '">✕</button></div>').join('') +
     '<form data-submit="addPerson" class="row" style="margin-top:8px"><input name="name" maxlength="40" placeholder="Add a person" aria-label="New person name" autocomplete="off"><button class="primary">Add</button></form></div>';
@@ -315,3 +322,5 @@ ACT.speedCheck = () => {
     out.textContent = 'With 500 products, 100 recipes and 1,000 logs, all calculations took ' + ms + ' ms (goal: under 1000 ms). This used temporary data; yours was not touched.';
   }, 30);
 };
+
+ACT.rfClear = () => { UI.rf.serve = ''; UI.rf.caf = ''; UI.rf.dairyFree = false; UI.rf.fav = false; render(); };

@@ -14,7 +14,7 @@ try { var t = localStorage.getItem('stockcup.theme'); if (t === 'dark' || t === 
 <style>
 :root {
   --bg: #fdf4d8; --surface: #fffaea; --surface2: #f3e4bd; --text: #33381f; --muted: #575437; --line: #e6d6a8;
-  --accent: #435230; --accent-text: #fdf4d8; --accent-soft: #e4e3b6; --warn: #6e4d33; --warn-soft: #f0dbb1; --bad: #9a3b28; --bad-soft: #f5d9c8; --ok: #435230; --ok-soft: #dfe5b9;
+  --accent: #4f7339; --accent-text: #ffffff; --accent-soft: #e0e9c9; --brand: #4f7339; --brand-2: #e0e9c9; --brand-2-text: #2f4222; --orange: #ffb347; --on-brand: #ffffff; --on-brand-soft: rgba(255,255,255,.18); --warn: #6e4d33; --warn-soft: #f0dbb1; --bad: #9a3b28; --bad-soft: #f5d9c8; --ok: #3d5c2c; --ok-soft: #dfe9c2;
   --tile1: #f0dbb1; --tile2: #e1e2b5; --tile3: #e9d2b3; --sage: #a4a279; --brown: #816148; --tan: #dec29d;
   --shadow: 0 1px 0 rgba(129,97,72,.08), 0 6px 18px rgba(129,97,72,.10); --radius: 22px; --radius-s: 16px; --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   color-scheme: light;
@@ -22,13 +22,13 @@ try { var t = localStorage.getItem('stockcup.theme'); if (t === 'dark' || t === 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #262a1e; --surface: #31362a; --surface2: #3d4331; --text: #fdf4d8; --muted: #bdb892; --line: #474d38;
-    --accent: #b9bd8c; --accent-text: #262a1e; --accent-soft: #434a2f; --warn: #ebc48f; --warn-soft: #4a3b27; --bad: #f2a58f; --bad-soft: #4d2d24; --ok: #cbd99b; --ok-soft: #3a4529;
+    --brand: #2e4a2c; --brand-2: #3a4a2e; --brand-2-text: #fdf4d8; --orange: #ffb347; --on-brand: #fdf4d8; --on-brand-soft: rgba(253,244,216,.14); --accent: #b4cf8b; --accent-text: #1f2a1a; --accent-soft: #3a4a2e; --warn: #ebc48f; --warn-soft: #4a3b27; --bad: #f2a58f; --bad-soft: #4d2d24; --ok: #cbd99b; --ok-soft: #3a4529;
     --tile1: #4a4430; --tile2: #3f4730; --tile3: #4a3d2d; --shadow: 0 1px 0 rgba(0,0,0,.25); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #262a1e; --surface: #31362a; --surface2: #3d4331; --text: #fdf4d8; --muted: #bdb892; --line: #474d38;
-  --accent: #b9bd8c; --accent-text: #262a1e; --accent-soft: #434a2f; --warn: #ebc48f; --warn-soft: #4a3b27; --bad: #f2a58f; --bad-soft: #4d2d24; --ok: #cbd99b; --ok-soft: #3a4529;
+  --brand: #2e4a2c; --brand-2: #3a4a2e; --brand-2-text: #fdf4d8; --orange: #ffb347; --on-brand: #fdf4d8; --on-brand-soft: rgba(253,244,216,.14); --accent: #b4cf8b; --accent-text: #1f2a1a; --accent-soft: #3a4a2e; --warn: #ebc48f; --warn-soft: #4a3b27; --bad: #f2a58f; --bad-soft: #4d2d24; --ok: #cbd99b; --ok-soft: #3a4529;
   --tile1: #4a4430; --tile2: #3f4730; --tile3: #4a3d2d; --shadow: 0 1px 0 rgba(0,0,0,.25); color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -38,8 +38,6 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 sys
 h1 { font: 700 1.6rem/1.2 var(--display); margin: 0; letter-spacing: .01em; } h2 { font: 700 1.2rem/1.3 var(--display); margin: 22px 0 8px; } h3 { font-size: 1rem; margin: 0 0 4px; }
 p { margin: 6px 0; } a { color: var(--accent); }
 .muted { color: var(--muted); } .small { font-size: .86rem; } .right { margin-left: auto; } .nowrap { white-space: nowrap; }
-.topbar { display: flex; align-items: center; gap: 10px; padding: 12px 0 6px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
-.topbar h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 8px 0; box-shadow: var(--shadow); }
 .card.tap { cursor: pointer; }
 .row { display: flex; align-items: center; gap: 10px; } .row.wrap { flex-wrap: wrap; } .row.top { align-items: flex-start; }
@@ -77,12 +75,38 @@ input[type=checkbox], input[type=radio] { width: 24px; height: 24px; flex: 0 0 a
 .invalid { border-color: var(--bad) !important; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stat { background: var(--surface2); border-radius: var(--radius-s); padding: 10px 12px; } .grid3 .stat:nth-child(1) { background: var(--tile1); } .grid3 .stat:nth-child(2) { background: var(--tile2); } .grid3 .stat:nth-child(3) { background: var(--tile3); } .stat b { display: block; font-size: 1.25rem; }
-.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.nav div { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
-.nav button { flex-direction: column; gap: 0; border: 0; border-radius: 0; background: transparent; min-height: 58px; font-size: .74rem; padding: 4px 2px; color: var(--muted); position: relative; }
-.nav button .ic { font-size: 1.3rem; line-height: 1.2; } .nav button[aria-current="page"] { color: var(--text); font-weight: 700; } .nav button[aria-current="page"] .ic { background: var(--tan); border-radius: 14px; padding: 0 14px; } :root[data-theme="dark"] .nav button[aria-current="page"] .ic { background: var(--accent-soft); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav button[aria-current="page"] .ic { background: var(--accent-soft); } }
-.nav .dot { position: absolute; top: 4px; right: 22%; background: var(--bad); color: #fff; border-radius: 999px; font-size: .65rem; min-width: 18px; height: 18px; line-height: 18px; text-align: center; padding: 0 4px; }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--brand); color: var(--on-brand); border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 18px rgba(0,0,0,.12); }
+.nav div { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.nav button { flex-direction: column; gap: 2px; border: 0; border-radius: 0; background: transparent; min-height: 62px; font-size: .78rem; padding: 6px 2px; color: #eef4e0; position: relative; }
+.nav button:hover { background: transparent; }
+.nav button svg { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.nav button[aria-current="page"] { color: #fff; font-weight: 700; } .nav button[aria-current="page"] svg { stroke: var(--orange); }
+.nav .dot { position: absolute; top: 4px; right: 24%; background: var(--orange); color: #3a2a08; border-radius: 999px; font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; line-height: 18px; text-align: center; padding: 0 4px; }
+.nav button:focus-visible { outline-color: #fff; }
+/* header / hero */
+.hero { background: var(--brand); color: var(--on-brand); margin: 0 -14px 12px; padding: 12px 14px 16px; border-radius: 0 0 28px 28px; }
+.hero-top { display: flex; align-items: center; gap: 10px; }
+.logo { display: flex; flex-direction: column; align-items: center; gap: 0; font: 700 .8rem/1 var(--display); flex: 0 0 auto; } .logo svg { width: 44px; height: 38px; }
+.hero h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-brand); }
+.searchbar { flex: 1; min-width: 0; justify-content: space-between; background: #fffaea; color: #6a6746; border: 0; border-radius: 16px; font-size: .92rem; } .searchbar svg { width: 22px; height: 22px; stroke: #8c8a6c; fill: none; stroke-width: 2; stroke-linecap: round; }
+.hero button:not(.searchbar):not(.avatar):not(.iconbtn) { background: var(--on-brand-soft); color: var(--on-brand); border-color: rgba(255,255,255,.3); }
+.hero button.primary { background: #fffaea; color: var(--brand); border-color: #fffaea; }
+.welcome { display: flex; align-items: center; gap: 12px; margin-top: 12px; } .welcome .who b { display: block; font: 700 1.25rem/1.2 var(--display); } .welcome .who span { font-size: .9rem; opacity: .92; }
+.avatar { width: 46px; height: 46px; padding: 0; border-radius: 50%; background: #fffaea; color: var(--brand); border: 2px solid var(--orange); font: 700 1.15rem var(--display); flex: 0 0 auto; }
+.iconbtn { position: relative; width: 46px; height: 46px; padding: 0; border-radius: 50%; background: #fffaea; color: var(--brand); border: 0; flex: 0 0 auto; } .iconbtn svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.iconbtn .count { position: absolute; top: -2px; right: -2px; background: var(--orange); color: #3a2a08; font-size: .7rem; font-weight: 700; min-width: 20px; height: 20px; line-height: 20px; border-radius: 99px; text-align: center; padding: 0 4px; }
+.iconbtn.plain { background: var(--surface2); color: var(--text); width: 44px; height: 44px; border: 1px solid var(--line); }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 12px; }
+.actions button { flex-direction: column; min-height: 96px; border-radius: var(--radius); background: var(--brand); color: var(--on-brand); border: 0; font-weight: 700; font-size: 1rem; text-align: center; line-height: 1.2; }
+.actions button svg { width: 38px; height: 38px; stroke: var(--on-brand); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; } .actions button:disabled { opacity: .55; }
+.actions button:hover { background: var(--brand); filter: brightness(1.08); }
+.insights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 14px; }
+.insights button { flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; gap: 2px; background: var(--brand-2); color: var(--brand-2-text); border: 0; border-radius: var(--radius-s); padding: 10px 12px; min-height: 86px; }
+.insights button .l { font-size: .8rem; font-weight: 600; opacity: .9; } .insights button b { font: 700 1.5rem/1.1 var(--display); }
+.sectionhead { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; } .sectionhead h2 { margin: 0; flex: 1; }
+.filterline { font-size: .86rem; color: var(--muted); margin: 2px 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.profilecard { display: flex; align-items: center; gap: 14px; background: var(--brand); color: var(--on-brand); border-radius: var(--radius); padding: 14px; margin: 6px 0 12px; } .profilecard .avatar { width: 56px; height: 56px; font-size: 1.5rem; }
+.linkrows button { width: 100%; justify-content: space-between; min-height: 56px; margin: 4px 0; font-weight: 600; border-radius: var(--radius-s); }
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: var(--bg); width: 100%; max-width: 720px; max-height: 94vh; border-radius: 28px 28px 0 0; display: flex; flex-direction: column; overflow: hidden; }
 .sheet.full { height: 100%; max-height: 100%; border-radius: 0; }
@@ -110,6 +134,10 @@ details { margin: 8px 0; } summary { min-height: 44px; display: flex; align-item
 .partrow:last-of-type { border-bottom: 0; }
 .partrow .qrow { margin-top: 6px; } .partrow .qrow input { width: 110px; flex: 0 0 auto; } .partrow .u { font-size: .85rem; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .sheet { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: .6; } } }
+
+.card .primary.small { border-radius: 999px; min-width: 64px; }
+#app { padding-top: 0; }
+.toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
 
 </style>
 </head>
@@ -1481,7 +1509,7 @@ function freshBadge(p) {
 const levelLabel = { none: 'No caffeine', low: 'Low caffeine', medium: 'Medium caffeine', high: 'High caffeine' };
 
 // ---------- router ----------
-const PAGES = { home: 'home', pantry: 'pantry', recipes: 'recipes', history: 'history', more: 'more', shopping: 'more', plan: 'more' };
+const PAGES = { home: 'home', pantry: 'pantry', recipes: 'recipes', history: 'more', more: 'more', shopping: 'more', plan: 'more' };
 function go(page) {
   UI.page = page; closeSheet(); render(); window.scrollTo(0, 0);
   if (location.hash !== '#/' + page) { try { history.pushState(null, '', '#/' + page); } catch (e) { location.hash = '#/' + page; } }
@@ -1490,16 +1518,36 @@ function routeFromHash() { const m = location.hash.match(/^#\/(\w+)/); UI.page =
 window.addEventListener('popstate', () => { routeFromHash(); closeSheet(); render(); window.scrollTo(0, 0); });
 window.addEventListener('hashchange', () => { routeFromHash(); closeSheet(); render(); window.scrollTo(0, 0); });
 
+const ICON = {
+  home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></svg>',
+  pantry: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="9" width="14" height="12" rx="3"/><path d="M8 9V6h8v3"/><path d="M5 14.5h14"/><path d="M9 3.5h6"/></svg>',
+  recipes: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 8h6M9 11.5h4"/></svg>',
+  profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c.8-3.6 4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg>',
+  search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21h4"/></svg>',
+  filter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
+  cup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 10.500h1.500a2.5 2.5 0 0 1 0 5H16.5"/><path d="M9 3.500c-1 1 1 2-.1 3.500M13 3.500c-1 1 1 2-.1 3.5"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-4.500L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14 4.500L20 15"/><path d="M20 20v-5h-5"/></svg>',
+  logo: '<svg viewBox="0 0 44 38" aria-hidden="true"><path d="M8 14h24v8a11 11 0 0 1-11 11h-2A11 11 0 0 1 8 22z" fill="#fffaea" stroke="#fffaea"/><path d="M32 16h2.500a4.5 4.5 0 0 1 0 9H31" fill="none" stroke="#fffaea" stroke-width="2.5"/><path d="M15 6c-2 2 2 4 0 6M22 6c-2 2 2 4 0 6" fill="none" stroke="#ffb347" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="23" r="1.3" fill="#4f7339"/><circle cx="25" cy="23" r="1.3" fill="#4f7339"/><path d="M18.5 26q2 2 4 0" fill="none" stroke="#4f7339" stroke-width="1.4" stroke-linecap="round"/></svg>',
+};
 function navHtml() {
   const low = SC.lowStock(S).length + S.shopping.length;
-  const tabs = [['home', '🏠', 'Home'], ['pantry', '🫙', 'Pantry'], ['recipes', '📖', 'Recipes'], ['history', '📊', 'Log'], ['more', '⚙️', 'More']];
-  return '<nav class="nav" aria-label="Main"><div>' + tabs.map((t) => '<button data-act="go" data-page="' + t[0] + '"' + (PAGES[UI.page] === t[0] ? ' aria-current="page"' : '') + '><span class="ic" aria-hidden="true">' + t[1] + '</span>' + t[2] + (t[0] === 'more' && low ? '<span class="dot" aria-label="' + low + ' to buy">' + low + '</span>' : '') + '</button>').join('') + '</div></nav>';
+  const tabs = [['home', 'home', 'Home'], ['pantry', 'pantry', 'Pantry'], ['recipes', 'recipes', 'Recipes'], ['more', 'profile', 'Profile']];
+  return '<nav class="nav" aria-label="Main"><div>' + tabs.map((t) => '<button data-act="go" data-page="' + t[0] + '"' + (PAGES[UI.page] === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[1]] + t[2] + (t[0] === 'more' && low ? '<span class="dot" aria-label="' + low + ' to buy">' + low + '</span>' : '') + '</button>').join('') + '</div></nav>';
 }
-function topbar(title, extra) {
-  const ppl = S.people.length;
-  return '<div class="topbar"><h1>' + esc(title) + '</h1>' + (extra || '') +
-    '<button class="small" data-act="nextPerson" aria-label="Active person: ' + esc(activePerson().name) + (ppl > 1 ? '. Tap to switch.' : '') + '">👤 ' + esc(activePerson().name) + '</button></div>' +
-    (storageNote ? '<div class="alert bad" role="alert">' + esc(storageNote) + '</div>' : '') + timerHtml();
+function avatarBtn() {
+  const p = activePerson();
+  return '<button class="avatar" data-act="nextPerson" aria-label="Active person: ' + esc(p.name) + (S.people.length > 1 ? '. Tap to switch.' : '. Open profile.') + '">' + esc((p.name.trim().charAt(0) || '?').toUpperCase()) + '</button>';
+}
+// Page header. home=true gives the full header (logo, search, welcome, bell); otherwise a compact title bar.
+function hero(title, extra, home) {
+  const notes = (storageNote ? '<div class="alert bad" role="alert">' + esc(storageNote) + '</div>' : '') + timerHtml();
+  if (home) {
+    const n = alertCount();
+    return '<header class="hero"><div class="hero-top"><div class="logo">' + ICON.logo + '<span>StockCup</span></div><button class="searchbar" data-act="openSearch" aria-label="Search pantry and recipes"><span>Search here …</span>' + ICON.search + '</button></div>' +
+      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span></div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
+  }
+  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div></header>' + notes;
 }
 
 // In-place DOM reconciliation: keeps the same elements (and focus) so a tap is never lost to a re-render.
@@ -1657,10 +1705,9 @@ function almostRow(a) {
 }
 
 // ---------- HOME ----------
-VIEWS.home = () => {
-  const t = today(), who = S.settings.activePerson; const sug = SC.suggest(S, {}, t); const last = SC.lastLogFor(S, who);
-  let h = topbar('StockCup');
-  const alerts = [];
+// Alerts shown in the bell sheet; the bell badge uses the same list.
+function buildAlerts() {
+  const t = today(); const alerts = [];
   S.machines.forEach((m) => {
     const d = SC.descaleStatus(m, t);
     if (d.due) alerts.push(alertBox('warn', '🧼 <b>Descale ' + esc(m.name) + '.</b> ' + (d.byCaps ? m.caps + ' capsules since the last descale (limit ' + m.descaleCaps + ').' : 'Last descaled more than ' + m.descaleMonths + ' months ago.') + ' <span class="muted small">(estimate)</span>', 'Done', 'descaled', m.id));
@@ -1673,21 +1720,32 @@ VIEWS.home = () => {
   const low = SC.lowStock(S);
   if (low.length) alerts.push(alertBox('warn', '🛒 <b>Running low:</b> ' + low.map((x) => esc(catLabel(x.type).toLowerCase()) + ' (' + fmt(x.total) + ' ' + x.unit + ')').join(', ') + '.', 'Shopping list', 'toShopping'));
   if (S.logs.length - S.settings.recountMark >= 20) alerts.push(alertBox('', '🔢 <b>' + (S.logs.length - S.settings.recountMark) + ' drinks logged since your last recount.</b> A quick look at the shelf keeps stock honest.', 'Not now', 'dismissRecount'));
-  h += alerts.join('');
+  return alerts;
+}
+const alertCount = () => buildAlerts().length;
+function filterLine() {
+  const f = UI.rf; const on = [];
+  if (f.serve) on.push(f.serve === 'iced' ? 'Iced' : 'Hot'); if (f.caf) on.push(levelLabel[f.caf]); if (f.dairyFree) on.push('Dairy-free'); if (f.fav) on.push('Favorites');
+  return on.length ? '<div class="filterline">Filters: <b>' + esc(on.join(' · ')) + '</b><button class="small ghost" data-act="rfClear">Clear</button></div>' : '';
+}
+VIEWS.home = () => {
+  const t = today(), who = S.settings.activePerson; const f = UI.rf; const filt = { serve: f.serve, caf: f.caf, dairyFree: f.dairyFree, fav: f.fav };
+  const all = SC.suggest(S, {}, t); const sug = SC.suggest(S, filt, t); const last = SC.lastLogFor(S, who);
+  let h = hero('', '', true);
   if (!S.products.filter((p) => p.category !== 'capsule' || SC.capsulesEnabled(S)).length) {
     h += '<div class="card"><div class="empty"><div class="big-ic">🍵</div><h2>Your pantry is empty</h2><p>Add a few products and StockCup will tell you what you can make, deduct stock when you log a drink and warn you before things go stale.</p></div><div class="stack">' +
       '<button class="primary big" data-act="openGuide">Take the 1-minute setup guide</button><button class="big" data-act="addPreset">Add from the starter list</button><button class="big" data-act="loadSample">Try the sample pantry</button></div></div>';
     return h;
   }
-  h += '<div class="grid2" style="margin-top:8px"><button class="primary big" data-act="logPick">☕ Log a drink</button><button class="big" data-act="logSame"' + (last ? '' : ' disabled') + '>↻ Same as last time</button></div>';
-  if (last) h += '<div class="small muted" style="margin:4px 2px">Last: ' + esc(last.name) + ' · ' + esc(fmtDT(last.ts)) + '</div>';
+  h += '<div class="actions"><button data-act="logPick">' + ICON.cup + 'Log a drink</button><button data-act="logSame"' + (last ? '' : ' disabled') + '>' + ICON.repeat + 'Same as last time</button></div>';
+  if (last) h += '<div class="small muted" style="margin:-4px 2px 6px">Last: ' + esc(last.name) + ' · ' + esc(fmtDT(last.ts)) + '</div>';
   const recents = []; S.logs.slice().sort((a, b) => (a.ts < b.ts ? 1 : -1)).forEach((l) => { if (l.personId === who && l.recipeId && recents.indexOf(l.recipeId) < 0 && S.recipes.some((r) => r.id === l.recipeId)) recents.push(l.recipeId); });
   if (recents.length) h += '<div class="chips" aria-label="Recent drinks">' + recents.slice(0, 5).map((id) => '<button class="chip" data-act="logRecipe" data-id="' + id + '">' + esc(S.recipes.find((r) => r.id === id).name) + '</button>').join('') + '</div>';
   const cafToday = SC.dayCaffeine(S, who, t);
-  h += '<div class="grid3" style="margin:10px 0"><div class="stat"><span class="small muted">Caffeine today (est.)</span><b>' + fmt(cafToday, 0) + ' mg</b></div><div class="stat"><span class="small muted">Drinks today</span><b>' + SC.logsFor(S, who).filter((l) => l.ts.slice(0, 10) === t).length + '</b></div><div class="stat"><span class="small muted">Can make now</span><b>' + sug.ready.length + '</b></div></div>';
-  h += '<h2>You can make now</h2>';
+  h += '<h2 style="margin-top:6px">Daily Insights</h2><div class="insights"><button data-act="go" data-page="history"><span class="l">Caffeine (est.)</span><b>' + fmt(cafToday, 0) + ' mg</b></button><button data-act="go" data-page="history"><span class="l">Drinks today</span><b>' + SC.logsFor(S, who).filter((l) => l.ts.slice(0, 10) === t).length + '</b></button><button data-act="seeMake"><span class="l">Can make now</span><b>' + all.ready.length + '</b></button></div>';
+  h += '<div class="sectionhead"><h2>Ready now</h2><button class="iconbtn plain" data-act="openFilters" aria-label="Filters">' + ICON.filter + '</button></div>' + filterLine();
   if (sug.ready.length) h += sug.ready.slice(0, 4).map((a) => recipeRow(a)).join('') + (sug.ready.length > 4 ? '<button class="big" data-act="seeMake">See all ' + sug.ready.length + '</button>' : '');
-  else h += '<div class="card muted">Nothing is fully covered right now. ' + (sug.almost.length ? 'See “almost there” below.' : 'Add more products to unlock recipes.') + '</div>';
+  else h += '<div class="card muted">Nothing is fully covered right now' + (filterLine() ? ' with these filters' : '') + '. ' + (sug.almost.length ? 'See “almost there” below.' : 'Add more products to unlock recipes.') + '</div>';
   if (sug.maybe.length) h += '<h2>Maybe (an amount is unknown)</h2>' + sug.maybe.slice(0, 3).map((a) => recipeRow(a, '<div class="small" style="color:var(--warn)">Recount to be sure.</div>')).join('');
   if (sug.useItUp.length) h += '<h2>Use it up</h2>' + sug.useItUp.slice(0, 3).map((u) => recipeRow(u.analysis, '<div class="small" style="color:var(--warn)">Uses ' + u.aged.map((x) => esc(SC.productLabel(x.p)) + (x.f.state === 'past' ? ' (past best)' : ' (open ' + x.f.days + ' d)')).join(', ') + '</div>')).join('');
   if (sug.almost.length) h += '<h2>Almost there</h2>' + sug.almost.slice(0, 3).map(almostRow).join('');
@@ -1699,7 +1757,7 @@ ACT.seeMake = () => { UI.rview = 'make'; go('recipes'); };
 ACT.dismissRecount = () => mutate((s) => { s.settings.recountMark = s.logs.length; });
 ACT.descaled = (el) => mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } });
 ACT.addMissing = (el, e) => { e.stopPropagation(); openProductForm({ category: el.dataset.cat }); };
-ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in More.'); };
+ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
 
 // ---------- PANTRY ----------
 function pantryItems() {
@@ -1725,12 +1783,12 @@ function pantryListHtml() {
   return items.map(productCard).join('');
 }
 VIEWS.pantry = () => {
-  let h = topbar('Pantry', '<button class="primary small" data-act="addMenu">＋ Add</button>');
+  let h = hero('Pantry', '<button class="primary small" data-act="addMenu">＋ Add</button>');
   h += '<input type="search" id="pantrySearch" data-input="pantryQ" placeholder="Search brand or name" aria-label="Search pantry" value="' + esc(UI.pantryQ) + '">';
   const cats = Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S));
   h += '<div class="chips" role="group" aria-label="Filter">' + [['all', 'All'], ['aging', '⏳ Aging']].concat(cats.map((c) => [c, catLabel(c)])).map((c) => '<button class="chip" aria-pressed="' + (UI.pantryCat === c[0]) + '" data-act="pantryCat" data-cat="' + c[0] + '">' + esc(c[1]) + '</button>').join('') + '</div>';
   h += '<div id="plist">' + pantryListHtml() + '</div>';
-  if (!SC.capsulesEnabled(S) && S.products.some((p) => p.category === 'capsule')) h += '<p class="small muted">Capsule products are hidden because no machine is set. Add one in More → Machines.</p>';
+  if (!SC.capsulesEnabled(S) && S.products.some((p) => p.category === 'capsule')) h += '<p class="small muted">Capsule products are hidden because no machine is set. Add one in Profile → Machines.</p>';
   return h;
 };
 INP.pantryQ = (el) => { UI.pantryQ = el.value; $('#plist').innerHTML = pantryListHtml(); };
@@ -1738,14 +1796,10 @@ ACT.pantryCat = (el) => { UI.pantryCat = el.dataset.cat; render(); };
 
 // ---------- RECIPES ----------
 function filterRow() {
-  const f = UI.rf;
-  return '<input type="search" data-input="rq" placeholder="Search recipes" aria-label="Search recipes" value="' + esc(f.q) + '">' +
-    '<div class="chips" role="group" aria-label="Filters">' +
-    [['serve', 'hot', '☕ Hot'], ['serve', 'iced', '🧊 Iced'], ['caf', 'none', 'No caffeine'], ['caf', 'low', 'Low'], ['caf', 'medium', 'Medium'], ['caf', 'high', 'High']].map((c) => '<button class="chip" aria-pressed="' + (f[c[0]] === c[1]) + '" data-act="rfilter" data-k="' + c[0] + '" data-v="' + c[1] + '">' + c[2] + '</button>').join('') +
-    '<button class="chip" aria-pressed="' + f.dairyFree + '" data-act="rfilter" data-k="dairyFree" data-v="1">🌱 Dairy-free</button><button class="chip" aria-pressed="' + f.fav + '" data-act="rfilter" data-k="fav" data-v="1">★ Favorites</button></div>';
+  return '<div class="row" style="margin:4px 0 6px"><input class="grow" type="search" data-input="rq" placeholder="Search recipes" aria-label="Search recipes" value="' + esc(UI.rf.q) + '"><button class="iconbtn plain" data-act="openFilters" aria-label="Filters">' + ICON.filter + '</button></div>' + filterLine();
 }
 VIEWS.recipes = () => {
-  let h = topbar('Recipes', '<button class="small" data-act="importRecipe">Import</button><button class="primary small" data-act="newRecipe">＋ New</button>');
+  let h = hero('Recipes', '<button class="small" data-act="importRecipe">Import</button><button class="primary small" data-act="newRecipe">＋ New</button>');
   h += '<div class="chips" role="group" aria-label="View"><button class="chip" aria-pressed="' + (UI.rview === 'make') + '" data-act="rview" data-v="make">What can I make?</button><button class="chip" aria-pressed="' + (UI.rview === 'all') + '" data-act="rview" data-v="all">All recipes</button></div>';
   h += filterRow();
   const f = UI.rf; const filt = { serve: f.serve, caf: f.caf, dairyFree: f.dairyFree, fav: f.fav, q: f.q };
@@ -1778,7 +1832,7 @@ INP.rq = (el) => { UI.rf.q = el.value; const pos = el.selectionStart; render(); 
 
 // ---------- LOG / INSIGHTS ----------
 VIEWS.history = () => {
-  let h = topbar('Log & insights');
+  let h = hero('Log & insights', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   const who = UI.hwho; const t = today();
   const opts = [['all', 'Household']].concat(S.people.map((p) => [p.id, p.name])); if (S.logs.some((l) => !l.personId)) opts.push(['none', 'Unassigned']);
   h += '<div class="chips" role="group" aria-label="Whose drinks">' + opts.map((o) => '<button class="chip" aria-pressed="' + (who === o[0]) + '" data-act="hwho" data-v="' + o[0] + '">' + esc(o[1]) + '</button>').join('') + '</div>';
@@ -1818,7 +1872,7 @@ ACT.undoAdj = (el) => { SC.undoAdjustment(S, el.dataset.id); save(); render(); t
 
 // ---------- SHOPPING ----------
 VIEWS.shopping = () => {
-  let h = topbar('Shopping list', '<button class="small" data-act="go" data-page="more">‹ More</button>');
+  let h = hero('Shopping list', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   const low = SC.lowStock(S);
   h += '<p class="muted small">Items appear when the total across all brands is at or below the low-stock limit you set in More.</p>';
   if (!low.length && !S.shopping.length) h += '<div class="empty"><div class="big-ic">🛒</div><p>Nothing to buy right now.</p></div>';
@@ -1842,7 +1896,7 @@ SUB.addShop = (f) => { const v = formData(f).label.trim(); if (!v) { toast('Type
 // ---------- GUEST PLAN ----------
 UI.plan = [];
 VIEWS.plan = () => {
-  let h = topbar('Guest plan', '<button class="small" data-act="go" data-page="more">‹ More</button>');
+  let h = hero('Guest plan', '<button class="small" data-act="go" data-page="more">‹ Profile</button>');
   h += '<p class="muted small">Check whether the pantry covers a round of drinks. Planning never changes your stock.</p>';
   UI.plan = UI.plan.filter((p) => S.recipes.some((r) => r.id === p.recipeId));
   UI.plan.forEach((p, i) => {
@@ -1873,8 +1927,9 @@ ACT.planToShop = () => {
 // ---------- MORE ----------
 VIEWS.more = () => {
   const lowN = SC.lowStock(S).length + S.shopping.length;
-  let h = topbar('More');
-  h += '<div class="grid2"><button class="big" data-act="go" data-page="shopping">🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</button><button class="big" data-act="go" data-page="plan">🎉 Guest plan</button></div>';
+  let h = hero('Profile');
+  h += '<div class="profilecard">' + avatarBtn().replace('data-act="nextPerson"', 'data-act="nextPerson"') + '<div class="grow"><b style="font:700 1.25rem var(--display)">' + esc(activePerson().name) + '</b><div class="small" style="opacity:.92">Active person · tap the circle to switch</div></div></div>';
+  h += '<div class="linkrows"><button data-act="go" data-page="history"><span>📊 Log & insights</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="shopping"><span>🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="plan"><span>🎉 Guest plan</span><span aria-hidden="true">›</span></button></div>';
   h += '<h2>People</h2><div class="card"><p class="small muted">Names only, no logins. Stock is shared; each drink is tagged with who had it.</p>' + S.people.map((p) =>
     '<div class="row"><div class="grow">' + (p.id === S.settings.activePerson ? '<b>' + esc(p.name) + '</b> <span class="badge acc">active</span>' : esc(p.name)) + '</div>' + (p.id === S.settings.activePerson ? '' : '<button class="small" data-act="setPerson" data-id="' + p.id + '">Use</button>') + '<button class="small" data-act="renamePerson" data-id="' + p.id + '">Rename</button><button class="small danger" data-act="delPerson" data-id="' + p.id + '" aria-label="Delete ' + esc(p.name) + '">✕</button></div>').join('') +
     '<form data-submit="addPerson" class="row" style="margin-top:8px"><input name="name" maxlength="40" placeholder="Add a person" aria-label="New person name" autocomplete="off"><button class="primary">Add</button></form></div>';
@@ -1947,6 +2002,8 @@ ACT.speedCheck = () => {
     out.textContent = 'With 500 products, 100 recipes and 1,000 logs, all calculations took ' + ms + ' ms (goal: under 1000 ms). This used temporary data; yours was not touched.';
   }, 30);
 };
+
+ACT.rfClear = () => { UI.rf.serve = ''; UI.rf.caf = ''; UI.rf.dairyFree = false; UI.rf.fav = false; render(); };
 
 /* StockCup sheets (forms and dialogs). */
 'use strict';
@@ -2286,6 +2343,30 @@ ACT.machineSave = () => {
   mutate((s) => { if (d.id) { const m = s.machines.find((x) => x.id === d.id); Object.assign(m, { name: name, system: f.system, descaleCaps: dc.value, descaleMonths: dm.value, caps: caps, lastDescaled: last }); } else { const m = SC.makeMachine(name, f.system, today()); m.descaleCaps = dc.value; m.descaleMonths = dm.value; s.machines.push(m); } }); closeSheet();
 };
 ACT.machineDel = () => { const d = SHEET.data; confirmDialog('Remove this machine? Capsules that no longer fit any machine stop counting as stock (they are kept, just hidden).', 'Remove', () => { mutate((s) => { s.machines = s.machines.filter((m) => m.id !== d.id); }); closeSheet(); }, true); };
+
+// ---------- header sheets: search, notifications, filters ----------
+ACT.openSearch = () => { openSheet('search', { q: '' }); const i = $('#searchInput'); if (i) i.focus(); };
+function searchResultsHtml(q) {
+  q = q.trim().toLowerCase(); if (!q) return '<div class="empty muted">Type a product or recipe name.</div>';
+  const caps = SC.capsulesEnabled(S);
+  const prods = S.products.filter((p) => (p.category !== 'capsule' || caps) && (p.brand + ' ' + p.name + ' ' + catLabel(p.category)).toLowerCase().indexOf(q) >= 0).slice(0, 8);
+  const recs = S.recipes.filter((r) => r.name.toLowerCase().indexOf(q) >= 0).slice(0, 8);
+  if (!prods.length && !recs.length) return '<div class="empty">Nothing found for “' + esc(q) + '”.</div>';
+  return (recs.length ? '<h2>Recipes</h2>' + recs.map((r) => '<div class="card tap" data-act="viewRecipe" data-id="' + r.id + '"><div class="row"><div class="grow"><h3>' + esc(r.name) + '</h3><div>' + recipeBadges(r) + '</div></div><button class="primary small" data-act="logRecipe" data-id="' + r.id + '" aria-label="Log ' + esc(r.name) + '">Log</button></div></div>').join('') : '') +
+    (prods.length ? '<h2>In your pantry</h2>' + prods.map(productCard).join('') : '');
+}
+SHEETS.search = (d) => ({ title: 'Search', body: '<input id="searchInput" type="search" data-input="searchQ" placeholder="Search pantry and recipes" aria-label="Search pantry and recipes" value="' + esc(d.q) + '" style="margin-top:8px"><div id="searchResults">' + searchResultsHtml(d.q) + '</div>' });
+INP.searchQ = (el) => { SHEET.data.q = el.value; $('#searchResults').innerHTML = searchResultsHtml(el.value); };
+ACT.openBell = () => openSheet('bell');
+SHEETS.bell = () => { const a = buildAlerts(); return { title: 'Notifications', body: a.length ? '<div style="margin-top:8px">' + a.join('') + '</div>' : '<div class="empty"><div class="big-ic">🌿</div><p>All clear. Nothing needs your attention.</p></div>' }; };
+ACT.openFilters = () => openSheet('filters');
+SHEETS.filters = () => {
+  const f = UI.rf; const chip = (k, v, label) => '<button class="chip" aria-pressed="' + (k === 'dairyFree' || k === 'fav' ? f[k] : f[k] === v) + '" data-act="rfilter" data-k="' + k + '" data-v="' + v + '">' + label + '</button>';
+  return { title: 'Filters', body: '<h2 style="margin-top:10px">Served</h2><div class="chips" style="flex-wrap:wrap">' + chip('serve', 'hot', '☕ Hot') + chip('serve', 'iced', '🧊 Iced') + '</div>' +
+    '<h2>Caffeine</h2><div class="chips" style="flex-wrap:wrap">' + chip('caf', 'none', 'No caffeine') + chip('caf', 'low', 'Low') + chip('caf', 'medium', 'Medium') + chip('caf', 'high', 'High') + '</div>' +
+    '<h2>Other</h2><div class="chips" style="flex-wrap:wrap">' + chip('dairyFree', '1', '🌱 Dairy-free') + chip('fav', '1', '★ Favorites') + '</div><p class="small muted">Dairy-free is worked out from the products you chose and each product’s “contains dairy” setting. It is not allergy advice.</p>',
+    footer: '<button data-act="rfClear">Clear all</button><button class="primary" data-act="closeSheet">Show recipes</button>' };
+};
 
 /* StockCup recipe sheets, import, guide. */
 'use strict';
