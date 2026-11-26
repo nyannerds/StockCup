@@ -70,10 +70,17 @@ const CATALOG = (function (SC) {
   add('Aiya', 'matcha', 'Matcha', [['Organic Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Premium First Harvest Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Organic Culinary Grade', { sizes: [100], sizesConfirmed: true }]]);
 
   // ---------- Syrups ----------
-  brand('Top Creamery', ['syrup'], ['TOP Series', 'TOP Series Classique', 'Top Creamery TOP Series', 'TOP Creamery']);
-  add('Top Creamery', 'syrup', 'TOP Series', [['Caramel', { sizes: [750, 250] }], ['Creamy Vanilla', { sizes: [750, 250] }], 'Mango', 'Green Mango'], { sizes: [750], sizesConfirmed: true });
-  add('Top Creamery', 'syrup', 'TOP Series Classique', ['French Vanilla', 'Hazelnut', 'Chocolate', 'Salted Caramel', 'Macadamia Nut', 'Philippine Mango', 'Green Apple', 'Watermelon', 'Lychee', 'Passion Fruit', 'Strawberry', 'Blueberry', 'Yuzu'], { sizes: [750], sizesConfirmed: true });
-  add('Top Creamery', 'syrup', 'TOP Series Sugar Syrups', ['Sugar Syrup', 'Cane Sugar Syrup', 'Brown Sugar Syrup'], { sizes: [750], sizesConfirmed: true });
+  // Top Creamery syrups: the list below is the shop's own price list (supplied by the user), all in 750 ml bottles. Caramel and Creamy Vanilla were also seen in 250 ml on their site.
+  // The groups are ours (the price list is flat), chosen to keep a 50-item dropdown easy to scan. Green Mango, Macadamia Nut and Cane Sugar come from their website listing, not the price list.
+  brand('Top Creamery', ['syrup'], ['TOP Series', 'TOP Series Classique', 'TOP Creamery']);
+  const tc = { sizes: [750], sizesConfirmed: true };
+  add('Top Creamery', 'syrup', 'Classic and dessert', ['Almond', ['Caramel', { sizes: [750, 250] }], ['Creamy Vanilla', { sizes: [750, 250] }], 'Cheesecake', 'Chocolate', 'Crème Brûlée', 'Cookie Dough', 'Creamy Coconut', 'Espresso', 'French Vanilla',
+    'Hazelnut', 'Macadamia Nut', 'Salted Caramel', 'Tiramisu', 'White Chocolate'], tc);
+  add('Top Creamery', 'syrup', 'Sugar', ['Sugar', 'Brown Sugar', 'Cane Sugar', 'Muscovado'], tc);
+  add('Top Creamery', 'syrup', 'Fruit', ['Banana', 'Blueberry', 'Cucumber', 'Green Apple', 'Green Mango', 'Kiwi', 'Lemon', 'Lychee', 'Mango', 'Orange', 'Passion Fruit', 'Peach', 'Peach Mango', 'Philippine Mango', 'Raspberry',
+    'Strawberry', 'Sweet Grapes', 'Watermelon', 'Wintermelon', 'Yuzu'], tc);
+  add('Top Creamery', 'syrup', 'Tea, floral, herbal and spice', ['Jasmine Tea', 'Hibiscus', 'Lavender', 'Lemongrass', 'Peppermint', 'Spearmint', 'Rose', 'Cinnamon', 'Pumpkin Spice'], tc);
+  add('Top Creamery', 'syrup', 'More', ['Blue Curacao', 'Grenadine', 'Ube', 'Yogurt'], tc);
 
   // ---------- Coffee beans ----------
   brand('Lavazza', ['coffee'], []);
