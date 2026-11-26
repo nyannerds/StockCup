@@ -115,6 +115,10 @@ Safety: the function only accepts https links to those three sites, follows redi
 1.5 MB, answers only the app's own requests (POST + JSON + a custom header, no cross-site access), rate-limits bursts, identifies itself as StockCupBot, and stores nothing.
 Fetching those sites is subject to their terms; it is for a person's own use on a link they pasted.
 
+## Demo video
+
+`node build.js && node scripts/make-demo-video.js [out.mp4]` records a silent, captioned walk-through of the real app (Playwright + ffmpeg; about 3 minutes, 1080p). The household scene uses the same in-memory stand-in for Supabase as `tests/sync-ui.test.js`, so it never touches a real project. The `.mp4` itself is not committed.
+
 ## Design notes
 
 * Navigation: four tabs (Home, Pantry, Recipes, Profile). Home has the search bar, the notification bell (descale, aging, low stock, recount alerts), Log a drink / Same as last time, Daily Insights tiles (tap for the log and history) and a filterable "Ready now" list. Profile holds people, machines, shopping list, guest plan, limits, appearance and data.
