@@ -117,7 +117,7 @@ Fetching those sites is subject to their terms; it is for a person's own use on 
 
 ## Demo video
 
-`node build.js && node scripts/make-demo-video.js [out.mp4]` records a silent, captioned walk-through of the real app (Playwright + ffmpeg; about 3 minutes, 1080p). The household scene uses the same in-memory stand-in for Supabase as `tests/sync-ui.test.js`, so it never touches a real project. The `.mp4` itself is not committed.
+`docs/StockCup-demo.mp4` is a silent, captioned pitch of the main features (about 1.5 minutes, 1080p). Re-record it with `node build.js && node scripts/make-demo-video.js [out.mp4]` (Playwright + ffmpeg); set `DEMO_PACE=1` for the slower walk-through (about 3 minutes). The household scene uses the same in-memory stand-in for Supabase as `tests/sync-ui.test.js`, so it never touches a real project and is simulated footage.
 
 ## Design notes
 

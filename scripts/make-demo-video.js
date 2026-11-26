@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Silent demo video of StockCup: drives the real built app (index.html) in Chromium at phone size, records it,
+/* Silent demo video (a short pitch of the key features) of StockCup: drives the real built app (index.html) in Chromium at phone size, records it,
    and lays it out with captions on a 1920x1080 canvas with ffmpeg. No audio narration.
    Run: node build.js && node scripts/make-demo-video.js [output.mp4]
    Needs: playwright (Chromium), ffmpeg, the Carlito font. The household-sync scene uses the same in-memory stand-in for
@@ -11,7 +11,8 @@ const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'stockcup-demo-'));
 const PEOPLE = ['Yanna', 'Dad', 'Mom', 'Niko'];
 const FONT = ['/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf'].find((f) => fs.existsSync(f)); const FONT_SERIF = ['/usr/share/fonts/truetype/crosextra/Caladea-Bold.ttf'].find((f) => fs.existsSync(f)) || FONT;
 if (!FONT) throw new Error('Carlito font not found');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PACE = Number(process.env.DEMO_PACE || 0.55); // 1 = slow walkthrough (about 3 minutes); 0.55 = pitch (about 1.5 minutes)
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.round(ms * PACE)));
 
 // ---- stand-in cloud (the class and transport factory are read from the sync UI test so there is one copy) ----
 const testSrc = fs.readFileSync(path.join(ROOT, 'tests', 'sync-ui.test.js'), 'utf8');
@@ -45,78 +46,69 @@ const TAP_JS = `(() => { const css = document.createElement('style'); css.textCo
   // scene markers: { t, kind: 'title'|'phone'|'end', text, sub, two }
   const marks = []; const scene = (kind, text, sub) => marks.push({ t: now(), kind, text, sub: sub || '', two: false });
   const showTwo = () => { marks.push({ t: now(), kind: 'phone', text: marks[marks.length - 1].text, sub: marks[marks.length - 1].sub, two: true }); };
-  async function tap(page, sel, o = {}) { const loc = page.locator(sel).first(); await loc.scrollIntoViewIfNeeded(); const b = await loc.boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 }); await sleep(o.pre === undefined ? 250 : o.pre); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await sleep(o.post === undefined ? 900 : o.post); }
-  async function type(page, sel, text, o = {}) { await tap(page, sel, { post: 150 }); await page.locator(sel).first().fill(''); await page.locator(sel).first().pressSequentially(text, { delay: o.delay || 70 }); if (o.blur) await page.keyboard.press('Tab'); await sleep(o.post === undefined ? 600 : o.post); }
-  async function pick(page, sel, v, o = {}) { const loc = page.locator(sel); const b = await loc.boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 }); await sleep(300); await loc.selectOption(v); await sleep(o.post === undefined ? 1300 : o.post); }
+  async function tap(page, sel, o = {}) { const loc = page.locator(sel).first(); await loc.scrollIntoViewIfNeeded(); const b = await loc.boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 6 }); await sleep(o.pre === undefined ? 250 : o.pre); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await sleep(o.post === undefined ? 900 : o.post); }
+  async function type(page, sel, text, o = {}) { await tap(page, sel, { post: 150 }); await page.locator(sel).first().fill(''); await page.locator(sel).first().pressSequentially(text, { delay: Math.round((o.delay || 70) * PACE) }); if (o.blur) await page.keyboard.press('Tab'); await sleep(o.post === undefined ? 600 : o.post); }
+  async function pick(page, sel, v, o = {}) { const loc = page.locator(sel); const b = await loc.boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 6 }); await sleep(300); await loc.selectOption(v); await sleep(o.post === undefined ? 1300 : o.post); }
   async function scrollBy(page, sel, y) { await page.evaluate(([s, dy]) => { const e = document.querySelector(s) || window; (e === window ? window : e).scrollBy({ top: dy, behavior: 'smooth' }); }, [sel, y]); await sleep(1100); }
   const closeSheet = async (page) => { await tap(page, '#overlay [data-act=closeSheet]', { post: 700 }); };
 
   await sleep(500);
   // ---- 1 title ----
-  scene('title', 'StockCup', 'Home coffee and matcha pantry'); await sleep(4200);
+  scene('title', 'StockCup', 'Home coffee and matcha pantry'); await sleep(6500);
   // ---- 2 home ----
-  scene('phone', 'Home: see what you can make right now', 'Ready-now recipes, daily insights and alerts');
-  await sleep(2500); await scrollBy(pa, null, 330); await sleep(1500); await scrollBy(pa, null, -330); await sleep(1200);
+  scene('phone', 'See what you can make right now', 'Ready-now recipes, daily insights and alerts');
+  await sleep(3200); await scrollBy(pa, null, 330); await sleep(1500); await scrollBy(pa, null, -330);
   // ---- 3 pantry ----
-  scene('phone', 'Pantry: every product by brand and pack size', 'Sealed packs and the open pack are tracked separately, with freshness');
-  await tap(pa, 'nav [data-page=pantry]', { post: 1800 }); await scrollBy(pa, null, 420); await sleep(1400); await scrollBy(pa, null, -420); await sleep(800);
+  scene('phone', 'Every product, by brand and pack size', 'Sealed and open packs tracked separately, with freshness');
+  await tap(pa, 'nav [data-page=pantry]', { post: 6000 });
   // ---- 4 add by brand ----
-  scene('phone', 'Add a product from brand lists', 'Pick the brand, the product and the pack size. “Other” lets you type your own');
+  scene('phone', 'Add products from brand lists', 'Brand, product, pack size. “Other” lets you type your own');
   await tap(pa, '[data-act=addMenu]', { post: 1200 }); await tap(pa, '[data-act=newProduct]', { post: 1200 });
   await pick(pa, '#f-pk_brand', 'Marukyu Koyamaen'); await pick(pa, '#f-pk_product', { label: 'Wako' }); await pick(pa, '#f-pk_size', '40');
   await type(pa, '#f-sealed', '2', { post: 500 }); await sleep(900); await tap(pa, '[data-act=saveProduct]', { post: 1600 });
   // ---- 5 nespresso ----
-  scene('phone', 'Nespresso: choose Original or Vertuo first', 'Then see only the flavours for that machine');
+  scene('phone', 'Nespresso: Original or Vertuo first', 'Then only the flavours for that machine');
   await tap(pa, '[data-act=addMenu]', { post: 1000 }); await tap(pa, '[data-act=newProduct]', { post: 1000 }); await pick(pa, '#f-category', 'capsule', { post: 1000 }); await pick(pa, '#f-pk_brand', 'Nespresso', { post: 1500 });
   await pick(pa, '#f-pk_system', 'original', { post: 1700 }); await pick(pa, '#f-pk_product', { label: 'Livanto' }, { post: 1800 });
   await pick(pa, '#f-pk_system', 'vertuo', { post: 1800 }); await pick(pa, '#f-pk_product', { label: 'Melozio' }, { post: 1800 }); await closeSheet(pa);
   // ---- 6 photo ----
-  scene('phone', 'Add an item from a photo of the label', 'The label is read on the phone, then you say how full it is. Photos are never saved');
+  scene('phone', 'Add from a photo of the label', 'Read on the phone; you say how full it is. Photos are never saved');
   await tap(pa, '[data-act=addMenu]', { post: 1000 }); await tap(pa, '[data-act=openPhoto]', { post: 1200 }); await type(pa, '#phText', 'Oatly Barista oat drink 1 L', { delay: 60, post: 800 }); await tap(pa, '[data-act=phParse]', { post: 1700 });
   await tap(pa, '[data-act=phFill][data-v=half]', { post: 1700 }); await tap(pa, '[data-act=phSave]', { post: 1800 });
   // ---- 7 log a drink ----
-  scene('phone', 'Log a drink: stock is deducted for you', 'Choose the recipe, the brand for each ingredient, even split one ingredient between two brands');
+  scene('phone', 'Log a drink: stock deducts for you', 'Pick the recipe and brands, even split one ingredient between two');
   await tap(pa, 'nav [data-page=home]', { post: 1200 }); await tap(pa, '[data-act=logPick]', { post: 1200 }); await tap(pa, '#overlay [data-act=logRecipe][data-id=r_matcha_latte]', { post: 1500 });
   const split = pa.locator('#overlay [data-act=logSplit]').first(); if (await split.count()) { await tap(pa, '#overlay [data-act=logSplit]', { post: 1800 }); }
   await scrollBy(pa, '#overlay .body', 260); await sleep(1500); await scrollBy(pa, '#overlay .body', -260); await sleep(500);
   await tap(pa, '[data-act=logSubmit]', { post: 2300 });
   // ---- 8 undo ----
   scene('phone', 'Made a mistake? Undo restores the stock', 'Every drink, restock and recount can be undone');
-  if (await pa.locator('[data-act=toastAction]').count()) await tap(pa, '[data-act=toastAction]', { post: 2600 }); else await sleep(2600);
-  await tap(pa, '[data-act=logPick]', { post: 1000 }); await tap(pa, '#overlay [data-act=logRecipe][data-id=r_iced_matcha]', { post: 1200 }); await tap(pa, '[data-act=logSubmit]', { post: 2200 });
-  scene('phone', 'Daily insights update: caffeine (estimate), drinks, what you can make', ''); await sleep(2800);
+  if (await pa.locator('[data-act=toastAction]').count()) await tap(pa, '[data-act=toastAction]', { post: 6000 }); else await sleep(6000);
   // ---- 9 recipes + scaling ----
-  scene('phone', 'Recipes: what can I make, and how much?', 'Scale a recipe to what you have or to the servings you want');
-  await tap(pa, 'nav [data-page=recipes]', { post: 2000 }); await scrollBy(pa, null, 380); await sleep(1000); await scrollBy(pa, null, -380);
+  scene('phone', 'Recipes: what can I make, and how much?', 'Scale to what you have or to the servings you want');
+  await tap(pa, 'nav [data-page=recipes]', { post: 1800 });
   await tap(pa, (await pa.locator('[data-act=viewRecipe][data-id=r_matcha_latte]').count()) ? '[data-act=viewRecipe][data-id=r_matcha_latte]' : '[data-act=viewRecipe]', { post: 1500 }); await tap(pa, '#overlay [data-act=openScale]', { post: 1300 });
   await pick(pa, '#overlay #f-mode', 'want', { post: 900 }); await type(pa, '#overlay #f-servings', '6', { blur: true, post: 1800 }); await scrollBy(pa, '#overlay .body', 260); await sleep(2200); await closeSheet(pa);
-  // ---- 10 guest plan ----
-  scene('phone', 'Hosting? Check if the pantry covers it', 'Covered or short, with the exact shortfall and a shopping list');
-  await tap(pa, 'nav [data-page=more]', { post: 1300 }); await tap(pa, '[data-act=go][data-page=plan]', { post: 1300 });
-  await pick(pa, '#f-recipe', 'r_matcha_latte', { post: 600 }); await type(pa, '#f-n', '12', { post: 400 }); await tap(pa, 'form[data-submit=planAdd] button', { post: 2200 }); await scrollBy(pa, null, 360); await sleep(2200);
-  if (await pa.locator('[data-act=planToShop]').count()) { await tap(pa, '[data-act=planToShop]', { post: 1800 }); }
   // ---- 11 household sync (two phones) ----
-  scene('phone', 'Share one pantry with your household', 'Create a household and give the others an invite code. No emails or passwords');
+  scene('phone', 'Share one pantry with your household', 'Create it, then share an invite code. No emails or passwords');
   await tap(pa, 'nav [data-page=more]', { post: 1300 }); await sleep(300); const gotoProfileTop = async () => { await pa.evaluate(() => window.scrollTo(0, 0)); };
   await scrollBy(pa, null, 460); await tap(pa, '[data-act=syncCreate]', { post: 1100 }); await type(pa, '#f-hname', 'Our Kitchen', { post: 300 }); await type(pa, '#f-label', 'Yanna', { post: 300 }); await type(pa, '#f-members', 'Dad\nMom\nNiko', { delay: 60, post: 700 });
   await tap(pa, '[data-act=syncDoCreate]', { post: 1800 }); await pa.waitForSelector('#inviteCode'); const code = (await pa.locator('#inviteCode').innerText()).trim(); await sleep(2200); await tap(pa, '#overlay [data-act=closeSheet]', { post: 1200 });
   // phone B joins
   B = await newPhone('B', false); await B.page.click('[data-act=gSkip]'); const tB = (B.t0 - T0) / 1000;
-  showTwo(); marks[marks.length - 1].text = 'A second phone joins with the invite code'; marks[marks.length - 1].sub = 'Then each person picks who they are, like Netflix profiles';
+  showTwo(); marks[marks.length - 1].text = 'A second phone joins with the code'; marks[marks.length - 1].sub = 'Then each person picks who they are';
   const pb = B.page; await sleep(800); await tap(pb, 'nav [data-page=more]', { post: 1200 }); await scrollBy(pb, null, 420); await tap(pb, '[data-act=syncJoin]', { post: 1000 }); await type(pb, '#f-code', code, { delay: 70, post: 400 }); await type(pb, '#f-label', 'Mom', { post: 500 });
   await tap(pb, '[data-act=syncDoJoin]', { post: 1800 }); await pb.waitForSelector('#overlay .profiles', { timeout: 15000 }); await sleep(2200); await tap(pb, '#overlay [data-act=pickPerson][aria-label="I am Mom"]', { post: 1500 });
-  marks.push({ t: now(), kind: 'phone', text: 'Changes show up on every phone', sub: 'A drink logged on one phone updates the stock on the other, even if one was offline', two: true });
+  marks.push({ t: now(), kind: 'phone', text: 'Changes appear on every phone', sub: 'A drink logged on one phone updates the stock on the other', two: true });
   await tap(pb, 'nav [data-page=more]', { post: 1200 }); await tap(pb, '[data-act=go][data-page=history]', { post: 1800 }); const n0 = await pb.evaluate(() => window.__stockcup.state.logs.length); await tap(pa, 'nav [data-page=home]', { post: 1200 }); await tap(pa, '[data-act=logPick]', { post: 1000 }); await tap(pa, '#overlay [data-act=logRecipe][data-id=r_flat_white]', { post: 1200 }); await tap(pa, '[data-act=logSubmit]', { post: 800 });
   await pb.waitForFunction((n) => window.__stockcup.state.logs.length > n, n0, { timeout: 15000 }); await sleep(1800); await scrollBy(pb, null, 430); await sleep(3200);
   const tEndTwo = now();
   // ---- 12 profiles + dark mode ----
-  marks.push({ t: now(), kind: 'phone', text: 'Who is drinking?', sub: 'Drinks, caffeine and cost are tracked per person', two: false });
+  marks.push({ t: now(), kind: 'phone', text: 'Who is drinking?', sub: 'Drinks, caffeine and cost are tracked per person, and it works offline', two: false });
   await tap(pa, 'nav [data-page=more]', { post: 1300 }); await pa.evaluate(() => window.scrollTo(0, 0)); await sleep(600); await tap(pa, '[data-act=openProfiles]', { post: 2200 }); await tap(pa, '#overlay [data-act=pickPerson][aria-label="I am Dad"]', { post: 1600 });
-  await tap(pa, '[data-act=go][data-page=history]', { post: 2400 }); await scrollBy(pa, null, 360); await sleep(1800); await scrollBy(pa, null, -360);
-  marks.push({ t: now(), kind: 'phone', text: 'Light or dark, on any phone', sub: 'Works offline once opened, and installs like an app', two: false });
-  await tap(pa, 'nav [data-page=more]', { post: 1200 }); await scrollBy(pa, null, 900); await pick(pa, '#f-theme', 'dark', { post: 2800 }); await scrollBy(pa, null, -900); await tap(pa, 'nav [data-page=home]', { post: 2600 });
+  await tap(pa, '[data-act=go][data-page=history]', { post: 3200 });
   // ---- end ----
-  scene('end', 'Try StockCup', 'stockcup.vercel.app'); await sleep(4200); const tEnd = now();
+  scene('end', 'Try StockCup', 'stockcup.vercel.app'); await sleep(6500); const tEnd = now();
   await A.ctx.close(); await B.ctx.close(); await browser.close();
   if (errors.length) console.log('page errors during recording:\n' + errors.join('\n'));
 
