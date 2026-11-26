@@ -304,6 +304,20 @@ const SCP = (function (SC) {
         ((hasQty(a) && !typeOf(a) && !isWater(a) && !isIce(a) && typeOf(b) && !hasQty(b)) || (typeOf(a) && !hasQty(a) && a.split(' ').length <= 3 && hasQty(b) && !typeOf(b) && b.split(' ').length <= 3))) { merged.push(hasQty(a) ? a + ' ' + b : b + ' ' + a); i++; } else merged.push(a);
     }
     lines = merged;
+    // A caption often runs together: "Title: 1 shot espresso, 150 ml tonic, ice. Pour over ice." Split it into title / ingredients / steps.
+    const explode = (l) => {
+      if (l.length < 40 || /^\d+[.)]\s/.test(l)) return [l];
+      const out = [];
+      l.replace(/([.!?])\s+(?=[A-Z0-9])/g, '$1\n').split('\n').forEach((sn) => {
+        let body = sn.trim(); if (!body) return; let head = null; const m = body.match(/^([^:]{1,40}):\s+(.+)$/);
+        if (m && !hasQty(m[1])) { head = m[1]; body = m[2]; }
+        const parts = body.replace(/[.!?]+$/, '').split(/;\s*|,\s+(?=[\d½¼¾a-z])|\s+\+\s+/i).filter((x) => x.trim());
+        const listy = parts.length >= 2 && parts.some(hasQty) && parts.every((x) => hasQty(x) || typeOf(x) || isIce(x) || isWater(x)) && !STEP_VERB.test((body.split(' ')[0] || ''));
+        if (listy) { if (head) out.push(head); out.push(body.replace(/[.!?]+$/, '')); } else out.push(sn.trim());
+      });
+      return out;
+    };
+    lines = lines.reduce((acc, l) => acc.concat(explode(l)), []);
     let mode = null; let firstLine = true;
     const pushIngredient = (l) => {
       const parts = l.split(/;\s*|,\s+(?=[\d½¼¾a-z])|\s+\+\s+/i).filter((x) => x.trim());
@@ -323,6 +337,7 @@ const SCP = (function (SC) {
       const hm = l.match(/^(ingredients?|steps?|method|instructions?|directions?)\s*:\s*(.+)$/i);
       if (hm) { mode = /^ingredient/i.test(hm[1]) ? 'ingr' : 'steps'; l = hm[2]; }
       const numbered = /^\d+[.)]\s+/.test(l); const stripped = l.replace(/^[\s\-•*·▪●✔✓☐□>]+/, '');
+      if (out.title && !hasQty(stripped) && stripEmoji(stripped).length >= 4 && (out.title.toLowerCase().indexOf(stripEmoji(stripped).toLowerCase()) >= 0 || stripEmoji(stripped).toLowerCase().indexOf(out.title.toLowerCase()) >= 0)) { firstLine = false; return; } // the title repeated
       if (firstLine && !mode && !out.title && !hasQty(stripped) && !VAGUE.test(stripped) && !/^[-•*·▪●✔✓☐□]/.test(l) && stripEmoji(stripped).length <= 60 && stripEmoji(stripped).length > 1 && lines.some(hasQty)) {
         out.title = titleCase(stripEmoji(stripped).replace(/[:!]+$/, '')); firstLine = false; return;
       }

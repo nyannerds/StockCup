@@ -69,6 +69,8 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 | `tests/schema.test.js` | Runs `supabase/schema.sql` in a real Postgres (PGlite): who can read/write what, append-only, invites, throttling, removal, leaving |
 | `tests/sync-ui.test.js` | Two phones through the real screens: create, join, log, offline queue, remove, leave |
 | `tests/supabase-api.test.js` | The app's Supabase calls match the SQL function and column names |
+| `tests/photo.test.js` | Photo-of-an-item flow, every fullness choice, tea, capsules, no photo stored, receipt coffee/tea switch |
+| `tests/link.test.js` | Video-link function (URL guard, redirects, size/time limits, extraction, rate limit) and the in-app flow end to end |
 | `tests/pwa.test.js` | Manifest and icons, service worker, installability, offline reload, offline OCR after first use |
 
 ## Adding items by photo
@@ -79,6 +81,19 @@ category and brand are filled in, you pick **how full it is** (Full / ¾ / ½ / 
 one opened pack. A carton or tin cannot show its level in a photo, so the fullness is always your choice; "Not sure" saves an unknown amount.
 If the label cannot be read, type what it says. Photo reading needs the app served over http(s) (see above); typing works anywhere.
 Receipt scans have an **only coffee, matcha, tea and capsules** switch on the review screen.
+
+## Recipe from a video link (best effort)
+
+Recipes → **Import → Video link**. Paste a YouTube, TikTok or Instagram link; a small function on the hosted app (`api/recipe-from-link.js`,
+free on Vercel) reads the page's **public caption/description**, which then goes through the same draft screen as pasted text. Nothing is downloaded or stored.
+
+What to expect: **YouTube** descriptions often list ingredients and work well. **TikTok and Instagram** frequently refuse automated requests, and many
+videos keep the recipe in the video itself (spoken or as on-screen text), which cannot be read this way; in those cases the app says so and you can paste the
+caption or use screenshots. It needs the hosted app and a connection (it is hidden-in-effect when opened as a file or offline).
+
+Safety: the function only accepts https links to those three sites, follows redirects by hand and only to those sites, times out after 8 s, reads at most
+1.5 MB, answers only the app's own requests (POST + JSON + a custom header, no cross-site access), rate-limits bursts, identifies itself as StockCupBot, and stores nothing.
+Fetching those sites is subject to their terms; it is for a person's own use on a link they pasted.
 
 ## Design notes
 

@@ -162,4 +162,11 @@ check('an unreadable label gives a row without a category (the app then asks) or
   assert.strictEqual(SCP.parsePhotoLabel('', state), null); const r = SCP.parsePhotoLabel('hello world', state); assert.ok(!r || !r.category);
 });
 
+
+check('captions: a run-on caption is split into title, ingredients and steps; a repeated title line is not an ingredient', () => {
+  const a = SCP.parseRecipeText('Espresso tonic: 1 shot espresso, 150 ml tonic water, ice. Pour over ice.'); assert.strictEqual(a.title, 'Espresso Tonic'); assert.ok(a.ingredients.find((i) => i.type === 'espresso' && i.amount === 1 && i.unit === 'shot')); assert.ok(a.ingredients.find((i) => i.type === 'tonic' && i.amount === 150)); assert.ok(a.ice); assert.ok(a.steps.length >= 1);
+  const b = SCP.parseRecipeText('Iced Dirty Matcha & Espresso\nIced dirty matcha ☕\nIngredients:\n- 2 tsp matcha\n- 1 double espresso\n- 150ml oat milk\n- ice'); assert.strictEqual(b.ingredients.length, 3, JSON.stringify(b.ingredients.map((i) => [i.type, i.amount])));
+  const c = SCP.parseRecipeText('Matcha latte\nAdd 2 tsp matcha, 150 ml milk and ice to a glass and stir.\n2 tsp matcha\n150 ml milk'); assert.strictEqual(c.ingredients.length, 2, 'a step that mentions ingredients stays a step');
+});
+
 console.log(failed ? '\n' + failed + ' failed' : '\nall parser checks passed'); process.exit(failed ? 1 : 0);

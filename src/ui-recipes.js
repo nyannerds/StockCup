@@ -106,12 +106,27 @@ ACT.rfSave = () => {
 // ---------- recipe import ----------
 ACT.importRecipe = () => openSheet('importRecipe', { tab: 'text', text: '', status: '', busy: false, err: '' });
 SHEETS.importRecipe = (d) => {
-  let b = '<p class="muted">Paste recipe text, or read screenshots on this device. You will check the draft before anything is saved. Screenshots are never stored.</p><div class="chips" role="group" aria-label="Source"><button class="chip" aria-pressed="' + (d.tab === 'text') + '" data-act="irTab" data-v="text">Paste text</button><button class="chip" aria-pressed="' + (d.tab === 'shots') + '" data-act="irTab" data-v="shots">Screenshots</button></div>';
+  let b = '<p class="muted">Paste recipe text, or read screenshots on this device. You will check the draft before anything is saved. Screenshots are never stored.</p><div class="chips" role="group" aria-label="Source"><button class="chip" aria-pressed="' + (d.tab === 'text') + '" data-act="irTab" data-v="text">Paste text</button><button class="chip" aria-pressed="' + (d.tab === 'shots') + '" data-act="irTab" data-v="shots">Screenshots</button><button class="chip" aria-pressed="' + (d.tab === 'link') + '" data-act="irTab" data-v="link">Video link</button></div>';
+  if (d.tab === 'link') b += '<p class="small muted">Paste a YouTube, TikTok or Instagram link. StockCup reads the public caption (needs a connection and works best with YouTube; TikTok and Instagram often refuse). The video is never downloaded. If it does not work, paste the caption yourself.</p><label class="f" for="irUrl">Link</label><input id="irUrl" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" value="' + esc(d.url || '') + '" autocomplete="off"><button class="primary big" style="margin-top:8px" data-act="irFetch"' + (d.busy ? ' disabled' : '') + '>Read the caption</button><div id="ocrStatus" class="small muted" role="status" style="margin:6px 0">' + esc(d.status) + '</div>';
   if (d.tab === 'shots') b += '<label class="f" for="irFiles">One or more screenshots</label><input type="file" id="irFiles" accept="image/*" multiple style="min-height:44px"><button class="primary big" style="margin-top:8px" data-act="irRead"' + (d.busy ? ' disabled' : '') + '>Read screenshots</button><div id="ocrStatus" class="small muted" role="status" style="margin:6px 0">' + esc(d.status) + '</div>';
-  b += (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + '<label class="f" for="irText">' + (d.tab === 'shots' ? 'Text read from the screenshots (edit if needed)' : 'Recipe text') + '</label><textarea id="irText" rows="9" placeholder="Iced dirty matcha&#10;2 tsp matcha&#10;1 double espresso&#10;150 ml oat milk&#10;ice">' + esc(d.text) + '</textarea>';
+  b += (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + '<label class="f" for="irText">' + (d.tab === 'shots' ? 'Text read from the screenshots (edit if needed)' : d.tab === 'link' ? 'Caption (edit if needed)' : 'Recipe text') + '</label><textarea id="irText" rows="9" placeholder="Iced dirty matcha&#10;2 tsp matcha&#10;1 double espresso&#10;150 ml oat milk&#10;ice">' + esc(d.text) + '</textarea>';
   return { title: 'Import a recipe', body: b, footer: '<button data-act="closeSheet">Cancel</button><button class="primary" data-act="irParse">Make a draft</button>' };
 };
-ACT.irTab = (el) => { SHEET.data.text = $('#irText').value; SHEET.data.tab = el.dataset.v; renderSheet(); };
+ACT.irTab = (el) => { SHEET.data.text = $('#irText').value; const u = $('#irUrl'); if (u) SHEET.data.url = u.value; SHEET.data.tab = el.dataset.v; renderSheet(); };
+ACT.irFetch = async () => {
+  const d = SHEET.data; d.url = $('#irUrl').value.trim(); d.text = $('#irText').value; d.err = '';
+  const say = (m) => { d.status = m; const n = $('#ocrStatus'); if (n) n.textContent = m; };
+  if (!/^https:\/\//i.test(d.url)) { say('Paste a full link that starts with https://'); return; }
+  if (!/^https?:$/.test(location.protocol)) { say('Reading links needs the hosted app, which fetches the caption on a small server. Paste the caption below instead.'); return; }
+  if (navigator.onLine === false) { say('You are offline. Paste the caption below instead.'); return; }
+  d.busy = true; say('Reading the link…'); renderSheet();
+  try {
+    const r = await fetch('/api/recipe-from-link', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-StockCup': '1' }, body: JSON.stringify({ url: d.url }) });
+    const j = await r.json().catch(() => null); if (!j || !j.ok) throw new Error((j && j.message) || 'Could not read that link. Paste the caption instead.');
+    d.text = [j.title, j.text, d.url].filter(Boolean).join('\n'); d.status = j.thin ? j.message : 'Caption found. Check the text, then press “Make a draft”.';
+  } catch (e) { d.status = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? 'Could not reach the server. Paste the caption below instead.' : e.message; }
+  d.busy = false; if (SHEET && SHEET.name === 'importRecipe') renderSheet();
+};
 ACT.irRead = async () => {
   const files = Array.prototype.slice.call(($('#irFiles') || {}).files || []); const d = SHEET.data; if (!files.length) { $('#ocrStatus').textContent = 'Choose at least one screenshot.'; return; }
   d.text = $('#irText').value; d.busy = true; const st = (m) => { const n = $('#ocrStatus'); if (n) n.textContent = m; };
