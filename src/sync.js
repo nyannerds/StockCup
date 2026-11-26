@@ -11,7 +11,7 @@
 const SYNC = (function (SC) {
   'use strict';
   const OP_VERSION = 1;
-  const LOCAL_SETTINGS = ['theme', 'tempUnit', 'imperial', 'onboarded', 'activePerson', 'recountMark', 'lastUsed', 'sampleLoaded'];
+  const LOCAL_SETTINGS = ['theme', 'tempUnit', 'imperial', 'onboarded', 'activePerson', 'recountMark', 'lastUsed', 'sampleLoaded', 'profileChosen'];
   const SHARED_SETTINGS = ['currency'];
   const STOCK_KEYS = ['sealed', 'count', 'open'];
   const COLLS = ['people', 'machines', 'recipes', 'shopping', 'products'];

@@ -47,19 +47,30 @@ class Cloud {
     await toProfile(A); const t = await A.page.locator('#syncCard').innerText(); assert.ok(/Create a household/.test(t) && /Join with an invite code/.test(t)); assert.strictEqual(await A.page.locator('.syncpill').count(), 0);
   });
   await test('A builds a pantry, creates a household and gets an invite code', async () => {
-    await addPreset(A, 'pre_matcha_cer'); await addPreset(A, 'pre_milk_oat'); await toProfile(A); await A.page.click('[data-act=syncCreate]'); await A.page.fill('#f-hname', 'Our Kitchen'); await A.page.fill('#f-label', 'Dad'); await A.page.click('[data-act=syncDoCreate]');
+    await addPreset(A, 'pre_matcha_cer'); await addPreset(A, 'pre_milk_oat'); await toProfile(A); await A.page.click('[data-act=syncCreate]'); await A.page.fill('#f-hname', 'Our Kitchen'); await A.page.fill('#f-label', 'Dad'); await A.page.fill('#f-members', 'Mum\nSam, mum\n'); await A.page.click('[data-act=syncDoCreate]');
     await A.page.waitForSelector('#inviteCode'); code = (await A.page.locator('#inviteCode').innerText()).trim(); assert.match(code, /^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/); await A.page.click('[data-act=closeSheet]');
     await waitPill(A, /Synced/); assert.ok(/Our Kitchen/.test(await A.page.locator('#syncCard').innerText())); assert.ok(cloud.rows.some((r) => r.type === 'snapshot'));
+    const sa = await A.page.evaluate(() => { const S = window.__stockcup.state; return { names: S.people.map((p) => p.name), active: S.people.find((p) => p.id === S.settings.activePerson).name, chosen: S.settings.profileChosen }; });
+    assert.deepStrictEqual(sa, { names: ['Dad', 'Mum', 'Sam'], active: 'Dad', chosen: true }, 'the starter "Me" became Dad, the other names were added once (duplicate "mum" ignored), and this phone is Dad');
   });
   await test('B tries a wrong code (friendly error), then joins with the real one and receives A\'s pantry', async () => {
     await toProfile(B); await B.page.click('[data-act=syncJoin]'); await B.page.fill('#f-code', 'WRONGWRONG12'); await B.page.fill('#f-label', 'Mum'); await B.page.click('[data-act=syncDoJoin]');
     await B.page.waitForSelector('#overlay .errbox'); assert.ok(/did not work/.test(await B.page.locator('#overlay .errbox').innerText()));
     await B.page.fill('#f-code', code.toLowerCase()); await B.page.click('[data-act=syncDoJoin]'); await waitPill(B, /Synced/);
+    // the "Who's drinking?" picker is required after joining: no close button, one tile per person plus "Someone new"
+    await B.page.waitForSelector('#overlay .profiles'); assert.ok(/Who.s drinking/.test(await B.page.locator('#overlay header').innerText())); assert.strictEqual(await B.page.locator('#overlay header [data-act=closeSheet]').count(), 0, 'cannot be dismissed without choosing');
+    assert.deepStrictEqual(await B.page.locator('#overlay .profile .pfn').allInnerTexts(), ['Dad', 'Mum', 'Sam', 'Someone new']);
+    const bad = await B.page.evaluate(() => { const o = []; if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 1) o.push('horizontal scroll'); document.querySelectorAll('#overlay .profile').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width < 44 || r.height < 44) o.push('small tile'); }); return o; }); assert.deepStrictEqual(bad, []);
+    await B.page.keyboard.press('Escape'); assert.ok(await B.page.locator('#overlay .profiles').count(), 'Escape does not dismiss it either');
+    await B.page.click('#overlay [data-act=pickPerson][aria-label="I am Mum"]'); assert.strictEqual(await B.page.locator('#overlay .profiles').count(), 0);
+    const sb = await B.page.evaluate(() => { const S = window.__stockcup.state; return { active: S.people.find((p) => p.id === S.settings.activePerson).name, chosen: S.settings.profileChosen }; }); assert.deepStrictEqual(sb, { active: 'Mum', chosen: true });
+    const sa = await A.page.evaluate(() => { const S = window.__stockcup.state; return S.people.find((p) => p.id === S.settings.activePerson).name; }); assert.strictEqual(sa, 'Dad', 'each phone keeps its own choice');
     const s = await state(B); assert.deepStrictEqual(s.products.map((p) => p.name).sort(), ['Ceremonial matcha', 'Oat milk (barista)']); await same(A, B);
   });
   await test('a drink logged on A shows up on B within a moment, with the same stock', async () => {
     await A.page.click('nav [data-page=home]'); await A.page.click('[data-act=logPick]'); await A.page.click('#overlay [data-act=logRecipe][data-id=r_matcha_latte]'); await A.page.click('[data-act=logSubmit]');
     await B.page.waitForFunction(() => window.__stockcup.state.logs.length === 1, null, { timeout: 8000 }); await same(A, B);
+    assert.strictEqual(await B.page.evaluate(() => { const S = window.__stockcup.state; return S.people.find((p) => p.id === S.logs[0].personId).name; }), 'Dad', 'the drink is tagged with the profile A was using');
     const m = (await state(B)).products.find((p) => p.name === 'Ceremonial matcha'); assert.strictEqual(m.sealed * m.size + (m.open ? m.open.amount : 0), 28);
   });
   await test('B goes offline: changes queue ("waiting"), A keeps working, and everything merges on reconnect', async () => {
@@ -69,11 +80,29 @@ class Cloud {
     await A.page.click('nav [data-page=home]'); await A.page.click('[data-act=logPick]'); await A.page.click('#overlay [data-act=logRecipe][data-id=r_matcha_latte]'); await A.page.click('[data-act=logSubmit]');
     cloud.down.delete('userB'); await B.page.evaluate(() => window.dispatchEvent(new Event('online'))); await waitPill(B, /^Synced/);
     await A.page.waitForFunction(() => window.__stockcup.state.logs.length === 3, null, { timeout: 8000 }); await B.page.waitForFunction(() => window.__stockcup.state.logs.length === 3, null, { timeout: 8000 }); await same(A, B);
+    assert.deepStrictEqual((await A.page.evaluate(() => { const S = window.__stockcup.state; return S.logs.map((l) => S.people.find((p) => p.id === l.personId).name).sort(); })), ['Dad', 'Dad', 'Mum'], 'B\'s offline drink is Mum\'s, A\'s are Dad\'s');
     const m = (await state(A)).products.find((p) => p.name === 'Ceremonial matcha'); assert.strictEqual(m.sealed * m.size + (m.open ? m.open.amount : 0), 30 - 2 - 2 + 30 - 2, 'start 30 g, three drinks of 2 g, one restocked 30 g pack');
   });
   await test('data survives a reload and the phone stays connected', async () => {
     await A.page.reload(); await A.page.waitForSelector('.syncpill'); await waitPill(A, /Synced/); await same(A, B);
     await toProfile(A); assert.ok(/Our Kitchen/.test(await A.page.locator('#syncCard').innerText())); assert.ok(/Mum/.test(await A.page.locator('#syncCard').innerText()), 'member list loads');
+  });
+  await test('someone new: a third phone joins, chooses "Someone new", and the new profile appears on every phone', async () => {
+    await toProfile(A); await A.page.click('[data-act=syncInvite]'); await A.page.waitForSelector('#inviteCode'); const code2 = (await A.page.locator('#inviteCode').innerText()).trim(); await A.page.click('[data-act=closeSheet]');
+    const C = await phone('userC'); await toProfile(C); await C.page.click('[data-act=syncJoin]'); await C.page.fill('#f-code', code2); await C.page.fill('#f-label', 'Gran'); await C.page.click('[data-act=syncDoJoin]'); await C.page.waitForSelector('#overlay .profiles');
+    await C.page.click('#overlay [data-act=pickNew]'); await C.page.fill('#f-pname', 'mum'); await C.page.click('[data-act=pickAdd]'); assert.ok(/already in the household/.test(await C.page.locator('#overlay .err').innerText()), 'duplicate names are refused');
+    await C.page.fill('#f-pname', ''); await C.page.click('[data-act=pickAdd]'); assert.ok(/Enter a name/.test(await C.page.locator('#overlay .err').innerText()));
+    await C.page.fill('#f-pname', 'Grandma'); await C.page.click('[data-act=pickAdd]'); assert.strictEqual(await C.page.locator('#overlay .profiles, #overlay #pnform').count(), 0);
+    assert.strictEqual(await C.page.evaluate(() => { const S = window.__stockcup.state; return S.people.find((p) => p.id === S.settings.activePerson).name; }), 'Grandma');
+    await A.page.waitForFunction(() => window.__stockcup.state.people.some((p) => p.name === 'Grandma'), null, { timeout: 8000 }); await B.page.waitForFunction(() => window.__stockcup.state.people.some((p) => p.name === 'Grandma'), null, { timeout: 8000 });
+    assert.strictEqual(await A.page.evaluate(() => { const S = window.__stockcup.state; return S.people.find((p) => p.id === S.settings.activePerson).name; }), 'Dad', 'A is still Dad'); await same(A, C);
+  });
+  await test('a phone that joined before profiles existed is asked once; "Switch profile" in Profile changes it any time', async () => {
+    await B.page.evaluate(() => { const S = window.__stockcup.state; S.settings.profileChosen = false; localStorage.setItem('stockcup.v1', JSON.stringify(S)); }); await B.page.reload(); await B.page.waitForSelector('#overlay .profiles', { timeout: 8000 });
+    assert.strictEqual(await B.page.locator('#overlay header [data-act=closeSheet]').count(), 0); await B.page.click('#overlay [data-act=pickPerson][aria-label="I am Sam"]');
+    await B.page.reload(); await B.page.waitForTimeout(400); assert.strictEqual(await B.page.locator('#overlay .profiles').count(), 0, 'asked only once');
+    await toProfile(B); await B.page.click('[data-act=openProfiles]'); await B.page.waitForSelector('#overlay .profiles'); assert.strictEqual(await B.page.locator('#overlay .profile.on .pfn').innerText(), 'Sam'); assert.ok(await B.page.locator('#overlay header [data-act=closeSheet]').count(), 'closable when opened from Profile');
+    await B.page.click('#overlay [data-act=pickPerson][aria-label="I am Mum"]'); assert.strictEqual(await B.page.evaluate(() => { const S = window.__stockcup.state; return S.people.find((p) => p.id === S.settings.activePerson).name; }), 'Mum');
   });
   await test('the owner can create a new invite and remove a member; the removed phone stops syncing but keeps its copy', async () => {
     await A.page.click('[data-act=syncInvite]'); await A.page.waitForSelector('#inviteCode'); await A.page.click('[data-act=closeSheet]');

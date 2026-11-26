@@ -73,7 +73,10 @@ async function syncInit() {
   SYNCUI.store = makeStore();
   SYNC_CLIENT = SYNC.createClient({ transport: lazyTransport, store: SYNCUI.store, getState: () => S, setState: (s) => { S = s; saveRaw(); render(true); }, deviceId: SYNCUI.deviceId, onChange: syncChanged });
   let had = false; try { had = await SYNC_CLIENT.load(); } catch (e) { had = false; }
-  if (had) { SYNC_CLIENT.start(); startSyncTimers(); refreshMembers(); render(true); }
+  if (had) {
+    SYNC_CLIENT.start(); startSyncTimers(); refreshMembers(); render(true);
+    if (!S.settings.profileChosen) { if (S.people.length < 2) { S.settings.profileChosen = true; saveRaw(); } else openSheet('whoAmI', { forced: true }); }
+  }
 }
 function startSyncTimers() {
   if (SYNCUI.timersOn) return; SYNCUI.timersOn = true;
@@ -124,23 +127,34 @@ function syncCardInner() {
 
 // ---------- sheets ----------
 const nameDefault = () => (activePerson().name || '').slice(0, 40);
+// The creator's name becomes their profile (renaming the starter "Me" if that is all there is), the other names are added, and this phone is set to the creator.
+function prepareHouseholdPeople(label, names) {
+  let mine = null;
+  if (S.people.length === 1 && S.people[0].name === 'Me') { mine = S.people[0]; mine.name = label; }
+  else { mine = S.people.find((p) => p.name.toLowerCase() === label.toLowerCase()); if (!mine) { mine = { id: SC.uid(), name: label }; S.people.push(mine); } }
+  names.forEach((n) => { if (!S.people.some((p) => p.name.toLowerCase() === n.toLowerCase())) S.people.push({ id: SC.uid(), name: n }); });
+  S.settings.activePerson = mine.id; S.settings.profileChosen = true; saveRaw();
+}
 ACT.syncCreate = () => {
   if (S.settings.sampleLoaded) { toast('Clear the sample pantry first (Profile → Your data).'); return; }
   openSheet('syncCreate', { hname: 'Home', label: nameDefault(), err: '' });
 };
-SHEETS.syncCreate = (d) => ({ title: 'Create a household', body: '<p class="muted">Your current pantry on this phone becomes the household pantry. Then you get an invite code to give to the others.</p>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('hname', 'Household name', d.hname) + field('label', 'What should others see you as?', d.label), footer: footBtns('closeSheet', 1, 'Create', 'syncDoCreate') });
+SHEETS.syncCreate = (d) => ({ title: 'Create a household', body: '<p class="muted">Your current pantry on this phone becomes the household pantry. Then you get an invite code to give to the others.</p>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('hname', 'Household name', d.hname) + field('label', 'Your name', d.label, { hint: 'This becomes your profile.' }) + '<label class="f" for="f-members">Who else is in the household? (optional, one name per line)</label><textarea id="f-members" rows="3" placeholder="Mum&#10;Sam" autocomplete="off">' + esc(d.members || '') + '</textarea><div class="small muted">Each person picks their own profile when they join. You can add more later in Profile.</div>', footer: footBtns('closeSheet', 1, 'Create', 'syncDoCreate') });
 ACT.syncDoCreate = async () => {
-  const d = SHEET.data; d.hname = $('#f-hname').value.trim(); d.label = $('#f-label').value.trim();
+  const d = SHEET.data; d.hname = $('#f-hname').value.trim(); d.label = $('#f-label').value.trim(); d.members = $('#f-members').value;
   if (!d.hname || d.hname.length > 60) { d.err = 'Enter a household name (up to 60 characters).'; renderSheet(); return; }
   if (!d.label || d.label.length > 40) { d.err = 'Enter a name for yourself (up to 40 characters).'; renderSheet(); return; }
-  const keep = { hname: d.hname, label: d.label }; openSheet('syncBusy', { msg: 'Creating your household…' });
+  const names = []; const seen = new Set([d.label.toLowerCase()]);
+  for (const raw of d.members.split(/[\n,;]+/)) { const n = raw.trim(); if (!n) continue; if (n.length > 40) { d.err = '“' + n.slice(0, 20) + '…” is too long (40 characters at most).'; renderSheet(); return; } if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); names.push(n); } }
+  if (names.length > 12) { d.err = 'Add up to 12 other people now; you can add more later in Profile.'; renderSheet(); return; }
+  const keep = { hname: d.hname, label: d.label, members: d.members }; openSheet('syncBusy', { msg: 'Creating your household…' });
   try {
-    const r = await getBackend().create(keep.hname, keep.label); await SYNC_CLIENT.attach({ id: r.id, name: keep.hname }, false, true); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers();
+    const r = await getBackend().create(keep.hname, keep.label); prepareHouseholdPeople(keep.label, names); await SYNC_CLIENT.attach({ id: r.id, name: keep.hname }, false, true); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers();
     render(true); openSheet('syncInvite', { code: r.code, name: keep.hname, fresh: true });
   } catch (e) { openSheet('syncCreate', Object.assign(keep, { err: friendly(e) })); }
 };
 ACT.syncJoin = () => openSheet('syncJoin', { code: '', label: nameDefault(), err: '' });
-SHEETS.syncJoin = (d) => ({ title: 'Join a household', body: '<div class="warnbox"><b>This replaces the pantry on this phone</b> with the household’s pantry. If you want to keep what is here, export it first.</div><button class="small" data-act="exportData">⬇ Export my pantry first</button>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('code', 'Invite code', d.code, { ph: 'XXXX-XXXX-XXXX', auto: 'off' }) + field('label', 'What should others see you as?', d.label), footer: footBtns('closeSheet', 1, 'Join', 'syncDoJoin') });
+SHEETS.syncJoin = (d) => ({ title: 'Join a household', body: '<div class="warnbox"><b>This replaces the pantry on this phone</b> with the household’s pantry. If you want to keep what is here, export it first. Next you will choose which person you are.</div><button class="small" data-act="exportData">⬇ Export my pantry first</button>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('code', 'Invite code', d.code, { ph: 'XXXX-XXXX-XXXX', auto: 'off' }) + field('label', 'What should others see you as?', d.label), footer: footBtns('closeSheet', 1, 'Join', 'syncDoJoin') });
 ACT.syncDoJoin = async () => {
   const d = SHEET.data; d.code = $('#f-code').value.trim(); d.label = $('#f-label').value.trim();
   if (d.code.replace(/[^A-Za-z0-9]/g, '').length < 8) { d.err = 'Type the whole invite code.'; renderSheet(); return; }
@@ -148,7 +162,7 @@ ACT.syncDoJoin = async () => {
   const keep = { code: d.code, label: d.label }; openSheet('syncBusy', { msg: 'Joining…' });
   try {
     const r = await getBackend().join(keep.code, keep.label); if (r.error) throw new Error(r.error);
-    await SYNC_CLIENT.attach({ id: r.id, name: r.name }, true, false); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers(); closeSheet(); render(); toast('Joined ' + r.name + '.');
+    await SYNC_CLIENT.attach({ id: r.id, name: r.name }, true, false); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers(); render(true); openSheet('whoAmI', { forced: true, joined: r.name });
   } catch (e) { openSheet('syncJoin', Object.assign(keep, { err: friendly(e) })); }
 };
 SHEETS.syncBusy = (d) => ({ title: 'One moment', noClose: true, body: '<div class="empty"><div class="big-ic">⏳</div><p>' + esc(d.msg) + '</p></div>' });
@@ -168,3 +182,32 @@ ACT.syncLeave = () => confirmDialog('Leave this household? You keep a copy of th
 ACT.syncDestroy = () => confirmDialog('Delete this household for everyone? Everyone keeps their own copy, but nothing will sync any more. This cannot be undone.', 'Delete household', async () => {
   const id = SYNC_CLIENT.household.id; try { await getBackend().destroy(id); await SYNC_CLIENT.detach(); SYNCUI.members = []; render(); toast('Household deleted.'); } catch (e) { toast(friendly(e)); }
 }, true);
+
+// ---------- "Who's drinking?": the profile picker ----------
+const AV_COLORS = ['#4f7339', '#9a5a22', '#6f4f82', '#2a6f7d', '#a03f55', '#66662a', '#8a5a1e', '#3f6f6a']; // all keep white initials above 5:1
+function avColor(id) { let h = 0; String(id).split('').forEach((c) => { h = (h * 31 + c.charCodeAt(0)) >>> 0; }); return AV_COLORS[h % AV_COLORS.length]; }
+const initialOf = (name) => (String(name).trim().charAt(0) || '?').toUpperCase();
+ACT.openProfiles = () => openSheet('whoAmI', { forced: false });
+SHEETS.whoAmI = (d) => {
+  const cur = S.settings.activePerson; const forced = !!d.forced;
+  const tiles = S.people.map((p) => '<button class="profile' + (!forced && p.id === cur ? ' on' : '') + '" data-act="pickPerson" data-id="' + esc(p.id) + '" aria-label="I am ' + esc(p.name) + '"><span class="pfc" style="background:' + avColor(p.id) + '">' + esc(initialOf(p.name)) + '</span><span class="pfn">' + esc(p.name) + '</span></button>').join('') +
+    '<button class="profile" data-act="pickNew" aria-label="I am someone new"><span class="pfc add">＋</span><span class="pfn">Someone new</span></button>';
+  let b = (d.joined ? '<div class="okbox">You joined “' + esc(d.joined) + '”.</div>' : '') + '<p class="muted" style="text-align:center">' + (d.adding ? 'Type the name you want others to see. It will be added to the household.' : forced ? 'Choose who you are. Your drinks will be saved under this profile on this phone.' : 'Choose who is drinking. You can switch any time.') + '</p>';
+  b += d.adding ? '<form data-submit="pickAddForm" id="pnform" novalidate>' + field('pname', 'Your name', d.pname || '', { err: d.perr, auto: 'off' }) + '</form>' : '<div class="profiles">' + tiles + '</div>';
+  return { title: 'Who’s drinking?', noClose: forced, body: b, footer: d.adding ? '<button data-act="pickBack">Back</button><button class="primary" data-act="pickAdd">Continue</button>' : (forced ? '' : '<button data-act="closeSheet">Cancel</button>') };
+};
+function chooseProfile(id) {
+  const d = SHEET && SHEET.data ? SHEET.data : {}; const p = S.people.find((x) => x.id === id); if (!p) return;
+  mutate((s) => { s.settings.activePerson = id; s.settings.profileChosen = true; }); closeSheet(); toast('You are ' + p.name + '.');
+  void d;
+}
+ACT.pickPerson = (el) => chooseProfile(el.dataset.id);
+ACT.pickNew = () => { SHEET.data.adding = true; SHEET.data.perr = ''; renderSheet(); const i = $('#f-pname'); if (i) i.focus(); };
+ACT.pickBack = () => { SHEET.data.adding = false; renderSheet(); };
+ACT.pickAdd = () => {
+  const d = SHEET.data; d.pname = $('#f-pname').value.trim();
+  if (!d.pname || d.pname.length > 40) { d.perr = 'Enter a name (up to 40 characters).'; renderSheet(); return; }
+  const dup = S.people.find((p) => p.name.toLowerCase() === d.pname.toLowerCase()); if (dup) { d.perr = '“' + dup.name + '” is already in the household. Go back and tap it.'; renderSheet(); return; }
+  const person = { id: SC.uid(), name: d.pname }; mutate((s) => { s.people.push(person); s.settings.activePerson = person.id; s.settings.profileChosen = true; }); closeSheet(); toast('Welcome, ' + person.name + '.');
+};
+SUB.pickAddForm = () => ACT.pickAdd();

@@ -95,6 +95,13 @@ one opened pack. A carton or tin cannot show its level in a photo, so the fullne
 If the label cannot be read, type what it says. Photo reading needs the app served over http(s) (see above); typing works anywhere.
 Receipt scans have an **only coffee, matcha, tea and capsules** switch on the review screen.
 
+### Profiles ("Who's drinking?")
+
+Members are devices; **profiles are the names on drinks** (Dad, Mum, Sam…). When you **create** a household you type your own name (it becomes your profile; the starter "Me" is renamed) and
+optionally the other family members' names, one per line. When someone **joins**, a Netflix-style **"Who's drinking?"** screen is required: tap your name, or **Someone new** to add yourself.
+Each phone remembers its own choice (it is never copied to other phones), so drinks logged there are tagged to that person. **Profile → Switch profile** changes it any time, e.g. on a shared kitchen tablet,
+and the circle in the top bar still cycles through people in one tap. Phones that joined before this existed are asked once.
+
 ## Recipe from a video link (best effort)
 
 Recipes → **Import → Video link**. Paste a YouTube, TikTok or Instagram link; a small function on the hosted app (`api/recipe-from-link.js`,

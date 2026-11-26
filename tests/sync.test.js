@@ -111,6 +111,7 @@ async function household() {
   });
   await test("device-only settings (theme, units, who I am) stay on each phone", async () => {
     const { A, B } = await household(); A.S.settings.theme = 'dark'; B.S.settings.activePerson = 'p_me'; B.S.settings.tempUnit = 'F'; A.S.people.push({ id: 'p2', name: 'Two' }); A.S.settings.activePerson = 'p2'; A.client.localChanged(A.S); await syncAll([A, B]);
+    A.S.settings.profileChosen = true; A.client.localChanged(A.S); await syncAll([A, B]); assert.ok(!B.S.settings.profileChosen, 'which profile a phone is using is never copied to the others'); assert.ok(SYNC.LOCAL_SETTINGS.includes('profileChosen') && SYNC.LOCAL_SETTINGS.includes('activePerson'));
     assert.strictEqual(B.S.settings.theme, 'auto'); assert.strictEqual(B.S.settings.tempUnit, 'F'); assert.strictEqual(A.S.settings.theme, 'dark'); assert.strictEqual(A.S.settings.activePerson, 'p2');
   });
   await test('pending changes survive an app restart and are sent afterwards', async () => {
