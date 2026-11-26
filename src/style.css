@@ -130,3 +130,5 @@ details { margin: 8px 0; } summary { min-height: 44px; display: flex; align-item
 .codebox { font: 700 1.6rem/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .08em; text-align: center; background: var(--surface2); border-radius: var(--radius-s); padding: 16px 8px; user-select: all; }
 
 .hero-sub { margin-top: 6px; } .hero-sub .syncpill { margin-left: 0; }
+
+.pickbox { background: var(--surface2); border-radius: var(--radius-s); padding: 2px 12px 12px; margin: 10px 0 4px; } .pickbox select { background: var(--surface); }

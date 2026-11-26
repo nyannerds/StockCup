@@ -34,18 +34,19 @@ function openProductForm(o) {
     f = { category: p.category, brand: p.brand, name: p.name, size: p.size, unit: p.unit, price: p.price === null ? '' : p.price, dairy: p.dairy, density: p.density, shelfLifeDays: p.shelfLifeDays === null ? '' : p.shelfLifeDays, caffeine: p.caffeine === null ? '' : p.caffeine,
       system: p.capsule ? p.capsule.system : 'original', intensity: p.capsule ? p.capsule.intensity : '', cupSize: p.capsule && p.capsule.cupSize ? p.capsule.cupSize : '', shots: p.capsule ? p.capsule.shots : 1, gramsPerShot: p.gramsPerShot || SC.GRAMS_PER_SHOT, usual: !!p.usual };
   } else f = Object.assign(productDefaults(o.category || (o.f && o.f.category) || 'matcha'), o.f || {});
-  openSheet('product', { id: id, f: f, errors: {} });
+  openSheet('product', { id: id, f: f, errors: {}, pick: { brand: '', product: '', size: '' } });
 }
 SHEETS.product = (d) => {
   const f = d.f, e = d.errors, isNew = !d.id, cat = f.category, C = SC.CATEGORIES[cat] || SC.CATEGORIES.other, isCap = cat === 'capsule';
   const cats = Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || cat === 'capsule');
   let b = '<form data-submit="product" id="pform" novalidate>' + selectField('category', 'Category', cats.map((c) => [c, catLabel(c)]), cat, { change: 'pfCat', err: e.category });
   if (!isNew) b = b.replace('<select ', '<select disabled ');
+  if (isNew) b += pickHtml(d);
   b += field('brand', 'Brand', f.brand, { err: e.brand, auto: 'off', ph: 'e.g. Brand A' }) + field('name', 'Product name', f.name, { err: e.name, ph: isCap ? 'e.g. Original Livanto' : 'e.g. Ceremonial matcha' });
   if (isCap) {
     b += field('size', 'Capsules per sleeve', f.size, { type: 'number', int: true, err: e.size });
     b += selectField('system', 'Machine system', [['original', 'Original'], ['vertuo', 'Vertuo']], f.system, { err: e.system });
-    b += '<div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', f.intensity, { type: 'number', int: true, err: e.intensity }) + '</div><div>' + field('shots', 'Shots per capsule', f.shots, { type: 'number', int: true, err: e.shots }) + '</div></div>';
+    b += '<div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', f.intensity, { type: 'number', int: true, err: e.intensity, hint: 'Printed on the sleeve.' }) + '</div><div>' + field('shots', 'Shots per capsule', f.shots, { type: 'number', int: true, err: e.shots }) + '</div></div>';
     b += '<div class="grid2"><div>' + field('cupSize', 'Cup size (ml)', f.cupSize, { type: 'number', err: e.cupSize }) + '</div><div>' + field('caffeine', 'Caffeine per capsule (mg)', f.caffeine, { type: 'number', err: e.caffeine, ph: 'default ' + SC.SHOT_CAFFEINE * (Number(f.shots) || 1) }) + '</div></div>';
   } else {
     b += '<div class="grid2"><div>' + field('size', 'Pack size', f.size, { type: 'number', err: e.size }) + '</div><div>' + (cat === 'other' ? selectField('unit', 'Unit', [['g', 'g'], ['ml', 'ml']], f.unit) : '<label class="f">Unit</label><input value="' + esc(C.unit) + '" disabled aria-label="Unit"><input type="hidden" name="unit" value="' + esc(C.unit) + '">') + '</div></div>';
@@ -66,10 +67,56 @@ SHEETS.product = (d) => {
   b += '</form>';
   return { title: isNew ? 'Add a product' : 'Edit product', body: b, footer: footBtns('closeSheet', 1, isNew ? 'Save product' : 'Save changes', 'saveProduct') };
 };
-function syncProductForm() { const form = $('#pform'); if (form && SHEET && SHEET.name === 'product') Object.assign(SHEET.data.f, formData(form)); }
+function syncProductForm() {
+  const form = $('#pform'); if (!form || !SHEET || SHEET.name !== 'product') return;
+  const v = formData(form); Object.keys(v).forEach((k) => { if (k.indexOf('pk_') !== 0) SHEET.data.f[k] = v[k]; }); // dropdown choices live in d.pick, not in the product
+}
+
+// ---------- brand / product / pack-size dropdowns (catalogue in catalog.js; "Other" always lets the user type) ----------
+const PK_FIELDS = ['category', 'brand', 'name', 'size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'caffeine', 'system', 'intensity', 'cupSize', 'shots'];
+const pkSystems = (cat) => (cat === 'capsule' ? { systems: SC.machineSystems(S) } : {});
+function pickBrandLists(cat) {
+  const catalog = CATALOG.brands(cat, pkSystems(cat)); const low = new Set(catalog.map((x) => x.toLowerCase())); const mine = [];
+  S.products.forEach((p) => { if (p.category === cat && !low.has(p.brand.toLowerCase()) && mine.indexOf(p.brand) < 0) mine.push(p.brand); });
+  return { catalog: catalog, mine: mine.sort((a, b) => a.localeCompare(b)) };
+}
+function pickHtml(d) {
+  const f = d.f, cat = f.category; const pk = d.pick || (d.pick = { brand: '', product: '', size: '' }); const lists = pickBrandLists(cat);
+  if (!lists.catalog.length && !lists.mine.length) return '';
+  const opt = (v, t, cur) => '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(t) + '</option>';
+  const sel = (name, label, inner) => '<label class="f" for="f-' + name + '">' + esc(label) + '</label><select id="f-' + name + '" name="' + name + '" data-change="pfPick">' + inner + '</select>';
+  let h = '<div class="pickbox"><div class="small muted" style="margin-top:8px">Pick from the list, or choose “Other” and type it below.</div>' +
+    sel('pk_brand', 'Brand', opt('', 'Choose a brand…', pk.brand) + lists.catalog.map((b) => opt(b, b, pk.brand)).join('') + (lists.mine.length ? '<optgroup label="Your brands">' + lists.mine.map((b) => opt(b, b, pk.brand)).join('') + '</optgroup>' : '') + opt('__other', 'Other (type it)', pk.brand));
+  if (lists.catalog.indexOf(pk.brand) >= 0) {
+    const groups = CATALOG.products(pk.brand, cat, pkSystems(cat)); const cap = cat === 'capsule';
+    h += sel('pk_product', cap ? 'Flavour' : 'Product', opt('', cap ? 'Choose a flavour…' : 'Choose a product…', pk.product) + groups.map((g) => '<optgroup label="' + esc(g.line) + '">' + g.items.map((e) => opt(e.id, e.name, pk.product)).join('') + '</optgroup>').join('') + opt('__other', 'Other (type it)', pk.product));
+    const e = CATALOG.byId(pk.product); const unit = SC.CATEGORIES[cat].unit;
+    if (e && e.sizes && (e.sizes.length > 1 || e.sizesTypical)) h += sel('pk_size', cap ? 'Capsules per sleeve' : 'Pack size', opt('', 'Choose a size…', pk.size) + e.sizes.map((s) => opt(String(s), s + (cap ? ' capsules' : ' ' + unit), pk.size)).join('') + opt('__other', 'Other (type it)', pk.size));
+    const hint = e ? CATALOG.hint(e) : ''; if (hint) h += '<div class="small" style="color:var(--warn);margin-top:6px">' + esc(hint) + '</div>';
+  }
+  return h + '</div>';
+}
+CHG.pfPick = (el) => {
+  syncProductForm(); const d = SHEET.data; const f = d.f; const pk = d.pick = d.pick || { brand: '', product: '', size: '' }; const v = el.value;
+  const clear = (...ks) => ks.forEach((k) => { f[k] = ''; });
+  if (el.name === 'pk_brand') {
+    const prev = pk.brand; const wasCatalogue = pickBrandLists(f.category).catalog.indexOf(prev) >= 0;
+    if (wasCatalogue && f.brand === prev) clear('brand'); if (pk.product) { clear('name', 'intensity', 'cupSize', 'caffeine'); if (f.category === 'capsule') f.shots = 1; }
+    d.pick = { brand: v, product: '', size: '' }; if (v && v !== '__other') f.brand = v;
+    if (f.category !== 'capsule' && pk.product) { const C = SC.CATEGORIES[f.category]; f.size = C.size; f.shelfLifeDays = C.shelf === null ? '' : C.shelf; }
+  } else if (el.name === 'pk_product') {
+    if (v === '__other' || v === '') { if (pk.product && pk.product !== '__other') clear('name', 'intensity', 'cupSize', 'caffeine'); pk.product = v; pk.size = ''; }
+    else { const entry = CATALOG.byId(v); if (entry) { const F = CATALOG.toForm(entry); PK_FIELDS.forEach((k) => { f[k] = F[k]; }); pk.product = v; pk.size = F.size === '' ? '' : String(F.size); } }
+  } else if (el.name === 'pk_size') {
+    pk.size = v; if (v === '__other' || v === '') f.size = ''; else f.size = Number(v);
+  }
+  d.errors = {}; renderSheet();
+};
 CHG.pfCat = (el) => {
-  syncProductForm(); const f = SHEET.data.f; const nf = productDefaults(el.value);
-  ['size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'shots', 'gramsPerShot'].forEach((k) => { f[k] = nf[k]; }); f.category = el.value; f.system = f.system || nf.system; SHEET.data.errors = {}; renderSheet();
+  syncProductForm(); const d = SHEET.data; const f = d.f; const nf = productDefaults(el.value);
+  if (d.pick && (d.pick.brand || d.pick.product)) { ['brand', 'name', 'intensity', 'cupSize', 'caffeine'].forEach((k) => { f[k] = ''; }); } // the list pick belonged to the old category
+  d.pick = { brand: '', product: '', size: '' };
+  ['size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'shots', 'gramsPerShot'].forEach((k) => { f[k] = nf[k]; }); f.category = el.value; f.system = f.system || nf.system; d.errors = {}; renderSheet();
 };
 CHG.pfMode = () => { syncProductForm(); renderSheet(); };
 ACT.saveProduct = () => { const form = $('#pform'); if (form) SUB.product(form); };
@@ -162,7 +209,7 @@ function rowHtml(r, i) {
     (r.matchedProductId ? '' : '<div class="grid2"><div>' + field('r' + i + '_brand', 'Brand', r.brand, { err: r.errors && r.errors.brand }) + '</div><div>' + field('r' + i + '_name', 'Name', r.name, { err: r.errors && r.errors.name }) + '</div></div>' +
       selectField('r' + i + '_category', 'Category', Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || r.category === 'capsule').map((c) => [c, catLabel(c)]), r.category || 'other', { change: 'rowField' }) +
       '<div class="grid2"><div>' + field('r' + i + '_size', cap ? 'Capsules per sleeve' : 'Pack size (' + (r.unit || '') + ')', r.size, { type: 'number', err: r.errors && r.errors.size }) + '</div><div>' + field('r' + i + '_price', 'Price per pack', r.price === null ? '' : r.price, { type: 'number', err: r.errors && r.errors.price }) + '</div></div>') +
-    (cap ? '<div class="grid2"><div>' + field('r' + i + '_sleeves', 'Sleeves', r.sleeves === null ? 0 : r.sleeves, { type: 'number', int: true }) + '</div><div>' + field('r' + i + '_loose', 'Loose capsules', r.loose || 0, { type: 'number', int: true }) + '</div></div>' : field('r' + i + '_packs', 'Packs bought', r.packs, { type: 'number', int: true, err: r.errors && r.errors.sealed })) + '</div>' : '') + '</div>';
+    (cap ? '<div class="grid2"><div>' + field('r' + i + '_sleeves', 'Sleeves', r.sleeves === null ? 0 : r.sleeves, { type: 'number', int: true }) + '</div><div>' + field('r' + i + '_loose', 'Loose capsules', r.loose || 0, { type: 'number', int: true }) + '</div></div>' + (r.matchedProductId ? '' : field('r' + i + '_intensity', 'Intensity (1–13)', r.intensity === null || r.intensity === undefined ? '' : r.intensity, { type: 'number', int: true, err: r.errors && r.errors.intensity, hint: 'Printed on the sleeve.' })) : field('r' + i + '_packs', 'Packs bought', r.packs, { type: 'number', int: true, err: r.errors && r.errors.sealed })) + '</div>' : '') + '</div>';
 }
 SHEETS.confirmRows = (d) => {
   const n = d.rows.filter((r) => r.include).length;
@@ -179,6 +226,7 @@ function syncRows() {
     const cat = f['r' + i + '_category']; if (cat && cat !== r.category) { r.category = cat; const C = SC.CATEGORIES[cat]; r.unit = C.unit; if (r.sizeGuessed || true) r.size = C.size; r.presetId = null; }
     if (f['r' + i + '_packs'] !== undefined) r.packs = f['r' + i + '_packs'];
     if (f['r' + i + '_sleeves'] !== undefined) { r.sleeves = f['r' + i + '_sleeves']; r.loose = f['r' + i + '_loose']; }
+    if (f['r' + i + '_intensity'] !== undefined) r.intensity = f['r' + i + '_intensity'];
   });
 }
 CHG.rowField = () => { syncRows(); renderSheet(); };
@@ -388,7 +436,7 @@ ACT.phParse = () => {
   const d = SHEET.data; d.text = $('#phText').value; const row = SCP.parsePhotoLabel(d.text, S);
   if (!row) { d.err = 'Type or read the label text first.'; renderSheet(); return; }
   const cat = row.category || 'other'; const C = SC.CATEGORIES[cat];
-  openSheet('photoConfirm', { row: row, category: cat, brand: row.brand || '', name: row.name || '', size: row.size || C.size, unit: row.unit || C.unit, price: row.price === null || row.price === undefined ? '' : row.price, fill: 'full', extra: 0, sleeves: cat === 'capsule' ? (row.sleeves === null || row.sleeves === undefined ? 1 : row.sleeves) : 0, loose: row.loose || 0, errors: {}, matchId: row.matchedProductId || null, known: !!row.category, sizeFound: row.sizeFound });
+  openSheet('photoConfirm', { row: row, category: cat, brand: row.brand || '', name: row.name || '', size: row.size || C.size, unit: row.unit || C.unit, price: row.price === null || row.price === undefined ? '' : row.price, fill: 'full', extra: 0, sleeves: cat === 'capsule' ? (row.sleeves === null || row.sleeves === undefined ? 1 : row.sleeves) : 0, loose: row.loose || 0, errors: {}, intensity: row.intensity === null || row.intensity === undefined ? '' : row.intensity, matchId: row.matchedProductId || null, known: !!row.category, sizeFound: row.sizeFound });
 };
 SHEETS.photoConfirm = (d) => {
   const e = d.errors || {}; const cap = d.category === 'capsule'; const existing = d.matchId ? S.products.find((p) => p.id === d.matchId) : null;
@@ -398,11 +446,11 @@ SHEETS.photoConfirm = (d) => {
     '<form id="phform" novalidate>' + selectField('category', 'Category', Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || d.category === 'capsule').map((c) => [c, catLabel(c)]), d.category, { change: 'phField' }) +
     '<div class="grid2"><div>' + field('brand', 'Brand', d.brand, { err: e.brand }) + '</div><div>' + field('name', 'Name', d.name, { err: e.name }) + '</div></div>' +
     '<div class="grid2"><div>' + field('size', cap ? 'Capsules per sleeve' : 'Pack size (' + d.unit + ')', d.size, { type: 'number', err: e.size }) + '</div><div>' + field('price', 'Price per pack (optional)', d.price, { type: 'number', err: e.price }) + '</div></div></form>';
-  if (cap) b += '<h2>How many?</h2><div class="grid2"><div>' + field('sleeves', 'Sleeves', d.sleeves, { type: 'number', int: true, err: e.sleeves, change: 'phField' }) + '</div><div>' + field('loose', 'Loose capsules', d.loose, { type: 'number', int: true, err: e.loose, change: 'phField' }) + '</div></div>';
+  if (cap) b += '<h2>Capsule details</h2><div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', d.intensity, { type: 'number', int: true, err: e.intensity, hint: 'Printed on the sleeve.' }) + '</div><div></div></div><h2>How many?</h2><div class="grid2"><div>' + field('sleeves', 'Sleeves', d.sleeves, { type: 'number', int: true, err: e.sleeves, change: 'phField' }) + '</div><div>' + field('loose', 'Loose capsules', d.loose, { type: 'number', int: true, err: e.loose, change: 'phField' }) + '</div></div>';
   else b += '<h2>How full is it?</h2><div class="chips" style="flex-wrap:wrap" role="group" aria-label="How full">' + FILL_CHIPS.map((c) => '<button class="chip" aria-pressed="' + (d.fill === c[0]) + '" data-act="phFill" data-v="' + c[0] + '">' + c[1] + '</button>').join('') + '</div><div class="small muted">' + (d.fill === 'full' ? 'Counts as one sealed pack.' : d.fill === 'unsure' ? 'Saved as “unknown amount”. You can recount it later.' : 'Saved as one opened pack, about ' + Math.round((SC.FILL[d.fill] || 0) * 100) + '% full (' + fmt((SC.FILL[d.fill] || 0) * (Number(d.size) || 0)) + ' ' + d.unit + ').') + '</div>' + field('extra', 'More sealed packs of this', d.extra, { type: 'number', int: true, err: e.sealed, change: 'phField' });
   return { title: 'Check this item', body: b, footer: '<button data-act="phBack">Back</button><button class="primary" data-act="phSave">Add to pantry</button>' };
 };
-function syncPhoto() { const f = $('#phform'); if (!f) return; const v = formData(f); const d = SHEET.data; ['brand', 'name', 'size', 'price'].forEach((k) => { if (v[k] !== undefined) d[k] = v[k]; }); ['extra', 'sleeves', 'loose'].forEach((k) => { const el = $('#f-' + k); if (el) d[k] = el.value; }); if (v.category) d.category = v.category; }
+function syncPhoto() { const f = $('#phform'); if (!f) return; const v = formData(f); const d = SHEET.data; ['brand', 'name', 'size', 'price'].forEach((k) => { if (v[k] !== undefined) d[k] = v[k]; }); ['extra', 'sleeves', 'loose', 'intensity'].forEach((k) => { const el = $('#f-' + k); if (el) d[k] = el.value; }); if (v.category) d.category = v.category; }
 CHG.phField = (el) => {
   syncPhoto(); const d = SHEET.data;
   if (el.name === 'category') { const C = SC.CATEGORIES[d.category]; d.unit = C.unit; if (!d.sizeFound || true) d.size = d.row && d.row.category === d.category ? d.row.size : C.size; d.known = true; if (d.category === 'capsule' && !Number(d.sleeves)) d.sleeves = 1; }
@@ -413,7 +461,7 @@ ACT.phBack = () => { const d = SHEET.data; openSheet('photoAdd', { text: (d.row 
 ACT.phRecount = (el) => { releasePhoto(); closeSheet(); openRecount(el.dataset.id); };
 ACT.phSave = () => {
   syncPhoto(); const d = SHEET.data; const cap = d.category === 'capsule';
-  const row = Object.assign({}, d.row, { category: d.category, brand: d.brand, name: d.name, size: d.size, unit: d.unit, price: d.price === '' ? null : d.price, presetId: d.row && d.row.category === d.category ? d.row.presetId : null, sleeves: Number(d.sleeves) || 0, loose: Number(d.loose) || 0, packs: 1 });
+  const row = Object.assign({}, d.row, { category: d.category, brand: d.brand, name: d.name, size: d.size, unit: d.unit, price: d.price === '' ? null : d.price, presetId: d.row && d.row.category === d.category ? d.row.presetId : null, catalogId: d.row && d.row.category === d.category ? d.row.catalogId : null, intensity: d.intensity, sleeves: Number(d.sleeves) || 0, loose: Number(d.loose) || 0, packs: 1 });
   const f = SCP.rowToForm(row); f.brand = d.brand; f.name = d.name; f.size = d.size; f.price = d.price; f.category = d.category;
   if (cap) { f.sleeves = d.sleeves; f.loose = d.loose; } else { f.sealed = (d.fill === 'full' ? 1 : 0) + (Number(d.extra) || 0); f.openMode = d.fill === 'full' ? 'none' : d.fill === 'unsure' ? 'unknown' : d.fill; f.openDate = today(); f.unit = d.unit; }
   const v = SC.validateProductInput(f, { withStock: true, today: today() }); if (v.ok && cap && !v.value.count) { v.ok = false; v.errors.sleeves = 'Enter how many capsules you have'; }

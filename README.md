@@ -65,6 +65,8 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 | `tests/parse.test.js` | Quick-add, receipt and recipe-text parsers (R20, R21) on synthetic corpora |
 | `tests/ui.test.js` | Real-browser flows at 360 px: tap counts, split/undo, validation, export/import, offline, 44 px targets, no horizontal scroll, dark mode |
 | `tests/ocr.test.js` | Bundled OCR reads a receipt image offline (needs http) |
+| `tests/catalog.test.js` | Brand catalogue: every entry validates, no invented numbers, helpers follow your machines, parsers match catalogue products |
+| `tests/catalog-ui.test.js` | The brand → product → size dropdowns in a real browser: Other (type it), Your brands, machine-filtered capsules, no guessed intensity |
 | `tests/sync.test.js` | Sync engine against a mock server: offline merges, last-gram conflicts, undo across phones, deleted products, idempotence, restart, replay speed |
 | `tests/schema.test.js` | Runs `supabase/schema.sql` in a real Postgres (PGlite): who can read/write what, append-only, invites, throttling, removal, leaving |
 | `tests/sync-ui.test.js` | Two phones through the real screens: create, join, log, offline queue, remove, leave |
@@ -72,6 +74,17 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 | `tests/photo.test.js` | Photo-of-an-item flow, every fullness choice, tea, capsules, no photo stored, receipt coffee/tea switch |
 | `tests/link.test.js` | Video-link function (URL guard, redirects, size/time limits, extraction, rate limit) and the in-app flow end to end |
 | `tests/pwa.test.js` | Manifest and icons, service worker, installability, offline reload, offline OCR after first use |
+
+## Brand lists (dropdowns)
+
+Pantry → ＋ Add → **Enter all the details**: under Category, choose a **Brand**, then a **Product** (a capsule *flavour*, a matcha such as Marukyu Koyamaen → Wako, a coffee line),
+then a **Pack size**. The fields below fill in and stay editable. Every list ends with **Other (type it)**, and brands you type yourself appear under **Your brands** next time.
+Capsule lists only show flavours for the machines you have. Typed lines, labels and receipts ("Marukyu Koyamaen Wako 40g") are matched against the same list.
+
+The list lives in `src/catalog.js` and is a **hand-compiled starter list, not authoritative**: Nespresso (Original and Vertuo), Marukyu Koyamaen, Ippodo, Aiya, Lavazza, illy, Starbucks and Twinings.
+Names were checked against public listings (brand sites could not be reached when it was written). Numbers are filled only when known; ones recalled but not confirmed are flagged
+"check your box" in the form, unknown ones (most Vertuo intensities, many cup sizes) are left blank, and pack sizes marked "typical" are never pre-selected. To add or fix an entry,
+edit `src/catalog.js` and run `npm test` (`tests/catalog.test.js` checks every entry).
 
 ## Adding items by photo
 

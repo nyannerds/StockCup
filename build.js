@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const src = (f) => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const js = ['core.js', 'parse.js', 'sync.js', 'ocr.js', 'ui-base.js', 'ui-views.js', 'ui-sheets.js', 'ui-recipes.js', 'ui-sync.js', 'ui-main.js'].map(src).join('\n');
+const js = ['core.js', 'catalog.js', 'parse.js', 'sync.js', 'ocr.js', 'ui-base.js', 'ui-views.js', 'ui-sheets.js', 'ui-recipes.js', 'ui-sync.js', 'ui-main.js'].map(src).join('\n');
 let html = src('index.template.html');
 html = html.replace('/*{{CSS}}*/', () => src('style.css')).replace('/*{{JS}}*/', () => js.replace(/<\/script/gi, '<\\/script'));
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);

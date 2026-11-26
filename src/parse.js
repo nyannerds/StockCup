@@ -3,6 +3,7 @@
 const SCP = (function (SC) {
   'use strict';
   const CATS = SC.CATEGORIES;
+  const CATLG = typeof module !== 'undefined' ? require('./catalog.js') : CATALOG;
 
   // ---------- shared text helpers ----------
   const FRAC = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅓': ' 1/3', '⅔': ' 2/3', '⅛': ' 1/8' };
@@ -60,6 +61,16 @@ const SCP = (function (SC) {
     };
     if (state) state.products.forEach((p) => consider('product', p));
     SC.PRESETS.forEach((p) => consider('preset', p));
+    // brand catalogue (strictly better than a product/preset match to win, so existing behaviour is unchanged where they overlap)
+    const nameTok = (e) => tokensOf(CATLG.displayName(e)); const qset = new Set(q);
+    CATLG.entries.forEach((e) => {
+      if (category && e.category !== category) return;
+      const info = CATLG.brandInfo[e.brand]; const names = [e.brand].concat((info && info.aliases) || []); let sc = 0;
+      names.forEach((bn) => { sc = Math.max(sc, jaccard(q, tokensOf(bn + ' ' + CATLG.displayName(e)))); });
+      // a distinctive product name on its own ("Wako", "Ummon") is enough when nothing else in the catalogue has it
+      const nt = nameTok(e); if (nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
+      if (sc > best.score) best = { score: sc, kind: 'entry', obj: e };
+    });
     return best.score >= 0.5 ? best : null;
   }
 
@@ -93,7 +104,7 @@ const SCP = (function (SC) {
     const category = categoryOf(orig);
     const match = matchCatalogue(s, category, state);
     const row = { raw: raw, include: true, category: category, brand: '', name: '', size: null, unit: null, packs: qty || 1, sleeves: null, loose: loose, price: price,
-      matchedProductId: null, presetId: null, dairy: null, f: null, confidence: 0 };
+      matchedProductId: null, presetId: null, catalogId: null, intensity: null, dairy: null, f: null, confidence: 0 };
     // convert size
     const toBase = (v, u, cat) => {
       if (u === 'kg' || /^kilogram/.test(u)) return { v: v * 1000, u: 'g' };
@@ -105,7 +116,8 @@ const SCP = (function (SC) {
       return null;
     };
     if (match) {
-      const o = match.obj; row.category = o.category; row.brand = o.brand; row.name = o.name; row.confidence = match.score;
+      const o = match.obj; row.category = o.category; row.brand = o.brand; row.name = match.kind === 'entry' ? CATLG.displayName(o) : o.name; row.confidence = match.score;
+      row.intensity = match.kind === 'entry' ? (o.intensity === undefined ? null : o.intensity) : (o.capsule && o.capsule.intensity !== undefined ? o.capsule.intensity : null);
       if (match.kind === 'preset' && o.category !== 'capsule') {
         // keep a brand the user typed (e.g. "Oatly") but reuse the preset's specs
         const have = new Set(tokensOf(o.brand + ' ' + o.name)); const kw = CAT_KW.find((k) => k[0] === o.category)[1];
@@ -113,7 +125,8 @@ const SCP = (function (SC) {
         const pre = (kwIdx > 0 ? words.slice(0, kwIdx) : []).filter((w) => !have.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')));
         if (pre.length) row.brand = titleCase(pre.slice(0, 3).join(' '));
       }
-      if (match.kind === 'product') { row.matchedProductId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
+      if (match.kind === 'entry') { row.catalogId = o.id; row.dairy = CATS[o.category].dairy; row.unit = CATS[o.category].unit; const ds = CATLG.toForm(o).size; row.size = ds === '' ? null : ds; }
+      else if (match.kind === 'product') { row.matchedProductId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
       else { row.presetId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
     }
     if (row.category) {
@@ -146,7 +159,7 @@ const SCP = (function (SC) {
       if (row.category) row.dairy = CATS[row.category].dairy;
     }
     // a line only counts as a receipt item if it has a price, a pack size, or is a known product (so a shop called "TEA SHOP" is not an item)
-    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, '')) && (row.price !== null || !row.sizeGuessed || !!row.presetId || !!row.matchedProductId);
+    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, '')) && (row.price !== null || !row.sizeGuessed || !!row.presetId || !!row.catalogId || !!row.matchedProductId);
     if (!orig) return null;
     return row;
   }
@@ -188,11 +201,11 @@ const SCP = (function (SC) {
   }
   // turn a confirm row into form data for SC.validateProductInput
   function rowToForm(row) {
-    const C = CATS[row.category] || CATS.other; const preset = row.presetId ? SC.PRESETS.find((p) => p.id === row.presetId) : null;
-    const f = preset ? SC.presetToForm(preset) : { category: row.category, density: C.density, shelfLifeDays: C.shelf, dairy: row.dairy !== null ? row.dairy : C.dairy, caffeine: '', shots: 1 };
+    const C = CATS[row.category] || CATS.other; const preset = row.presetId ? SC.PRESETS.find((p) => p.id === row.presetId) : null; const entry = row.catalogId ? CATLG.byId(row.catalogId) : null;
+    const f = entry ? CATLG.toForm(entry, row.size) : preset ? SC.presetToForm(preset) : { category: row.category, density: C.density, shelfLifeDays: C.shelf, dairy: row.dairy !== null ? row.dairy : C.dairy, caffeine: '', shots: 1 };
     f.brand = row.brand; f.name = row.name; f.size = row.size; f.unit = row.unit; f.price = row.price === null || row.price === undefined ? '' : row.price; f.category = row.category;
     if (row.dairy !== null && row.dairy !== undefined) f.dairy = row.dairy;
-    if (row.category === 'capsule') { f.sleeves = row.sleeves || 0; f.loose = row.loose || 0; if (!f.system) f.system = /vertuo/i.test(row.name + row.brand) ? 'vertuo' : 'original'; if (!f.intensity) f.intensity = 6; }
+    if (row.category === 'capsule') { f.sleeves = row.sleeves || 0; f.loose = row.loose || 0; if (!f.system) f.system = /vertuo/i.test(row.name + row.brand) ? 'vertuo' : 'original'; if (row.intensity !== null && row.intensity !== undefined && row.intensity !== '') f.intensity = row.intensity; else if (f.intensity === undefined) f.intensity = ''; } // never guess an intensity: it is printed on the sleeve
     else { f.sealed = row.packs; f.openMode = 'none'; }
     return f;
   }
@@ -385,6 +398,6 @@ const SCP = (function (SC) {
       steps: (d.steps || []).map((s) => String(s).trim()).filter(Boolean), note: String(d.note || '').slice(0, 300), sourceLink: d.sourceLink ? String(d.sourceLink).slice(0, 300) : '' } };
   }
 
-  return { normalize, categoryOf, tokensOf, parseProductLine, parsePhotoLabel, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
+  return { matchCatalogue, normalize, categoryOf, tokensOf, parseProductLine, parsePhotoLabel, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
 })(typeof module !== 'undefined' ? require('./core.js') : SC);
 if (typeof module !== 'undefined') module.exports = SCP;

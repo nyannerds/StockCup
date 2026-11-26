@@ -151,6 +151,8 @@ details { margin: 8px 0; } summary { min-height: 44px; display: flex; align-item
 
 .hero-sub { margin-top: 6px; } .hero-sub .syncpill { margin-left: 0; }
 
+.pickbox { background: var(--surface2); border-radius: var(--radius-s); padding: 2px 12px 12px; margin: 10px 0 4px; } .pickbox select { background: var(--surface); }
+
 </style>
 </head>
 <body>
@@ -1051,11 +1053,132 @@ const SC = (function () {
 })();
 if (typeof module !== 'undefined') module.exports = SC;
 
+/* StockCup product catalogue: brand -> product -> pack size, used by the dropdowns in the add-product form and by the text/photo parsers.
+
+   STATUS: a hand-compiled STARTER list, not authoritative. It was checked against public product listings (retailer and brand pages found by web search)
+   but NOT against each brand's own site, because those hosts were unreachable when it was written. Rules used:
+     * names are only included when they were seen in a listing;
+     * numbers (intensity, cup size, caffeine, pack sizes) are filled only when known. A number that is recalled but not confirmed is listed in `est`,
+       and the form tells the user to check it against their box. Unknown numbers are simply absent (never a placeholder);
+     * pack sizes marked `sizesTypical` are common sizes offered as choices, never silently pre-selected.
+   Every dropdown also has "Other (type it)", and anything typed becomes part of "Your brands" next time.
+   To add or correct something, edit the lists below and run `npm test` (tests/catalog.test.js checks the shape of every entry). */
+const CATALOG = (function (SC) {
+  'use strict';
+  const entries = []; const brandInfo = {};
+  const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  function brand(name, categories, aliases) { brandInfo[name] = { brand: name, categories: categories, aliases: aliases || [] }; }
+  // add(brand, category, line, [name | [name, extra]], common)
+  function add(b, category, line, items, common) {
+    items.forEach((it) => {
+      const name = Array.isArray(it) ? it[0] : it; const extra = Array.isArray(it) ? it[1] : {};
+      const e = Object.assign({ brand: b, category: category, line: line, name: name }, common || {}, extra || {});
+      e.id = 'cat_' + slug(b) + '_' + slug(line) + '_' + slug(name); entries.push(e);
+    });
+  }
+
+  // ---------- Nespresso capsules ----------
+  brand('Nespresso', ['capsule'], ['Nespresso Original', 'Nespresso Vertuo', 'Vertuoline', 'Original Line']);
+  const orig = { system: 'original', shots: 1, sizes: [10], sizesConfirmed: true };
+  add('Nespresso', 'capsule', 'Original · Classics', [
+    ['Ristretto', { cupSize: 25 }],                       // intensity differs between sources (9 or 10): left for the user to read off the sleeve
+    ['Arpeggio', { intensity: 9, est: ['intensity'] }], ['Roma', { intensity: 8, est: ['intensity'] }], ['Livanto', { intensity: 6, est: ['intensity'] }],
+    ['Capriccio', { intensity: 5 }],                      // 5 confirmed on Nespresso's own page (via search)
+    ['Volluto', { intensity: 4, est: ['intensity'] }], ['Cosi', { intensity: 4, est: ['intensity'] }], ['Dharkan', { intensity: 11, est: ['intensity'] }],
+    ['Kazaar', { intensity: 12, cupSize: 25, est: ['intensity', 'cupSize'] }],
+  ], orig);
+  add('Nespresso', 'capsule', 'Original · Ispirazione', [['Napoli', { intensity: 13, est: ['intensity'] }], ['Venezia', { intensity: 8, est: ['intensity'] }]], orig);
+  add('Nespresso', 'capsule', 'Original · Master Origins', [
+    ['Colombia', { intensity: 6 }], ['Ethiopia', { intensity: 4 }], ['Indonesia', { intensity: 8 }], ['Nicaragua', { intensity: 5 }], // confirmed on Nespresso pages (via search)
+    'India', 'Costa Rica', 'Peru Organic',
+  ], orig);
+  add('Nespresso', 'capsule', 'Original · Decaffeinato', [
+    ['Ristretto Decaffeinato', { intensity: 10, cupSize: 25, caffeine: 5, est: ['cupSize', 'caffeine'] }],
+    ['Arpeggio Decaffeinato', { intensity: 9, caffeine: 5, est: ['intensity', 'caffeine'] }], ['Volluto Decaffeinato', { intensity: 4, caffeine: 5, est: ['intensity', 'caffeine'] }],
+  ], orig);
+  const vert = { system: 'vertuo', sizes: [8, 10], sizesTypical: true };
+  add('Nespresso', 'capsule', 'Vertuo · Espresso (40 ml)', [['Altissio', { cupSize: 40, shots: 1 }], ['Diavolitto', { cupSize: 40, shots: 1 }], ['Voltesso', { cupSize: 40, shots: 1 }], ['Espresso Forte', { cupSize: 40, shots: 1, est: ['name'] }]], vert);
+  add('Nespresso', 'capsule', 'Vertuo · Double Espresso (80 ml)', [['Double Espresso Scuro', { cupSize: 80, shots: 2 }], ['Double Espresso Chiaro', { cupSize: 80, shots: 2 }], ['Double Espresso Dolce', { cupSize: 80, shots: 2 }],
+    ['Double Espresso Chiaro Decaffeinato', { cupSize: 80, shots: 2, caffeine: 10, est: ['caffeine'] }]], vert);
+  add('Nespresso', 'capsule', 'Vertuo · Mug (230 ml)', [['Solelio', { cupSize: 230, shots: 1 }]], vert);
+  add('Nespresso', 'capsule', 'Vertuo · More coffees', [['Melozio', { shots: 1 }], ['Odacio', { shots: 1 }], ['Stormio', { shots: 1 }], ['Melozio Decaffeinato', { shots: 1, caffeine: 5, est: ['caffeine'] }],
+    ['Altissio Decaffeinato', { cupSize: 40, shots: 1, caffeine: 5, est: ['caffeine'] }]], vert);
+  add('Nespresso', 'capsule', 'Vertuo · Barista Creations', [['Bianco Forte', { shots: 1 }], ['Bianco Doppio', { shots: 1 }], ['Bianco Piccolo', { shots: 1 }]], vert);
+
+  // ---------- Matcha and hojicha ----------
+  const typical = { sizes: [20, 30, 40, 100], sizesTypical: true };
+  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu', 'Koyamaen', 'Marukyu Koyamaen Matcha']);
+  add('Marukyu Koyamaen', 'matcha', 'Matcha', ['Isuzu', 'Aoarashi', 'Yugen', 'Wako', 'Kinrin', 'Chigi no Shiro'], typical);
+  add('Marukyu Koyamaen', 'hojicha', 'Hojicha powder', ['Hojicha Powder A', 'Hojicha Powder B'], { sizes: [40, 100, 200], sizesTypical: true });
+  brand('Ippodo', ['matcha', 'tea'], ['Ippodo Tea', 'Ippodo Tea Co', 'Ippodo Tea Co.']);
+  add('Ippodo', 'matcha', 'Matcha', [['Ummon-no-mukashi', { sizes: [20, 40], sizesConfirmed: true }], ['Sayaka-no-mukashi', { sizes: [20, 40, 100], sizesConfirmed: true }]]);
+  add('Ippodo', 'tea', 'Roasted green tea (leaves)', [['Gokujo Hojicha', { sizes: [80, 100], sizesTypical: true }]]);
+  brand('Aiya', ['matcha'], ['AIYA', 'Aiya America']);
+  add('Aiya', 'matcha', 'Matcha', [['Organic Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Premium First Harvest Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Organic Culinary Grade', { sizes: [100], sizesConfirmed: true }]]);
+
+  // ---------- Coffee beans ----------
+  brand('Lavazza', ['coffee'], []);
+  add('Lavazza', 'coffee', 'Whole beans', ['Qualità Oro', 'Super Crema', 'Crema e Aroma', 'Qualità Rossa', 'Tierra'], { sizes: [250, 500, 1000], sizesTypical: true });
+  brand('illy', ['coffee'], ['Illy', 'illy caffè', 'illycaffè']);
+  add('illy', 'coffee', 'Whole beans', ['Classico', 'Intenso'], { sizes: [250, 500], sizesTypical: true });
+  brand('Starbucks', ['coffee'], []);
+  add('Starbucks', 'coffee', 'Whole beans', ['Pike Place Roast', 'Veranda Blend', 'Caffè Verona', 'Espresso Roast'], { sizes: [340, 510], sizesTypical: true }); // 12 oz and 18 oz bags
+
+  // ---------- Tea ----------
+  brand('Twinings', ['tea'], []);
+  add('Twinings', 'tea', 'Tea bags', ['Earl Grey', 'English Breakfast', 'Pure Green Tea', 'Darjeeling', 'Lady Grey', ['Pure Camomile', { caffeine: 0 }]], { sizes: [40, 100, 200], sizesTypical: true });
+
+  // ---------- helpers ----------
+  const byBrandKey = (b) => String(b).toLowerCase();
+  function brands(category, opts) {
+    opts = opts || {}; const seen = {}; const out = [];
+    entries.forEach((e) => {
+      if (e.category !== category) return; if (opts.systems && e.system && !opts.systems.has(e.system)) return;
+      if (!seen[e.brand]) { seen[e.brand] = true; out.push(e.brand); }
+    });
+    return out.sort((a, b) => a.localeCompare(b));
+  }
+  // products of one brand for a category, grouped by line (the dropdown's option groups)
+  function products(b, category, opts) {
+    opts = opts || {}; const lines = []; const idx = {};
+    entries.forEach((e) => {
+      if (e.brand !== b || e.category !== category) return; if (opts.systems && e.system && !opts.systems.has(e.system)) return;
+      if (!(e.line in idx)) { idx[e.line] = lines.length; lines.push({ line: e.line, items: [] }); } lines[idx[e.line]].items.push(e);
+    });
+    return lines;
+  }
+  const byId = (id) => entries.find((e) => e.id === id) || null;
+  const defaultSize = (e) => (e.sizes && e.sizes.length === 1 && !e.sizesTypical ? e.sizes[0] : '');
+  function displayName(e) { return e.system ? (e.system === 'original' ? 'Original ' : 'Vertuo ') + e.name : e.name; }
+  // The same form object SC.presetToForm builds, so the existing form, validator and builder are reused unchanged.
+  function toForm(e, size) {
+    const C = SC.CATEGORIES[e.category];
+    const sz = size === undefined || size === null || size === '' ? defaultSize(e) : size;
+    return {
+      category: e.category, brand: e.brand, name: displayName(e), size: sz === undefined ? '' : sz, unit: C.unit, dairy: C.dairy, density: C.density,
+      shelfLifeDays: e.shelf !== undefined ? e.shelf : (C.shelf === null ? '' : C.shelf), caffeine: e.caffeine !== undefined ? e.caffeine : '',
+      system: e.system || '', intensity: e.intensity !== undefined ? e.intensity : '', cupSize: e.cupSize !== undefined ? e.cupSize : '', shots: e.shots !== undefined ? e.shots : 1,
+    };
+  }
+  const EST_LABEL = { intensity: 'intensity', cupSize: 'cup size', caffeine: 'caffeine', name: 'name' };
+  // A short note for the form when something here is recalled rather than confirmed, or sizes are only typical.
+  function hint(e) {
+    if (!e) return ''; const parts = [];
+    if (e.est && e.est.length) parts.push((e.est.map((k) => EST_LABEL[k] || k).join(', ')) + ' ' + (e.est.length > 1 ? 'are' : 'is') + ' approximate');
+    if (e.sizesTypical) parts.push('the pack sizes listed are typical');
+    return parts.length ? 'Check your box: ' + parts.join('; ') + '.' : '';
+  }
+  function allBrandNames() { return Object.keys(brandInfo).sort((a, b) => a.localeCompare(b)); }
+  return { entries, brandInfo, brands, products, byId, toForm, hint, displayName, allBrandNames };
+})(typeof module !== 'undefined' ? require('./core.js') : SC);
+if (typeof module !== 'undefined') module.exports = CATALOG;
+
 /* StockCup parsers: quick-add lines, receipt text, pasted recipe text. Rule-based, on-device, imperfect on purpose:
    everything they produce goes through a confirm screen. */
 const SCP = (function (SC) {
   'use strict';
   const CATS = SC.CATEGORIES;
+  const CATLG = typeof module !== 'undefined' ? require('./catalog.js') : CATALOG;
 
   // ---------- shared text helpers ----------
   const FRAC = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅓': ' 1/3', '⅔': ' 2/3', '⅛': ' 1/8' };
@@ -1113,6 +1236,16 @@ const SCP = (function (SC) {
     };
     if (state) state.products.forEach((p) => consider('product', p));
     SC.PRESETS.forEach((p) => consider('preset', p));
+    // brand catalogue (strictly better than a product/preset match to win, so existing behaviour is unchanged where they overlap)
+    const nameTok = (e) => tokensOf(CATLG.displayName(e)); const qset = new Set(q);
+    CATLG.entries.forEach((e) => {
+      if (category && e.category !== category) return;
+      const info = CATLG.brandInfo[e.brand]; const names = [e.brand].concat((info && info.aliases) || []); let sc = 0;
+      names.forEach((bn) => { sc = Math.max(sc, jaccard(q, tokensOf(bn + ' ' + CATLG.displayName(e)))); });
+      // a distinctive product name on its own ("Wako", "Ummon") is enough when nothing else in the catalogue has it
+      const nt = nameTok(e); if (nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
+      if (sc > best.score) best = { score: sc, kind: 'entry', obj: e };
+    });
     return best.score >= 0.5 ? best : null;
   }
 
@@ -1146,7 +1279,7 @@ const SCP = (function (SC) {
     const category = categoryOf(orig);
     const match = matchCatalogue(s, category, state);
     const row = { raw: raw, include: true, category: category, brand: '', name: '', size: null, unit: null, packs: qty || 1, sleeves: null, loose: loose, price: price,
-      matchedProductId: null, presetId: null, dairy: null, f: null, confidence: 0 };
+      matchedProductId: null, presetId: null, catalogId: null, intensity: null, dairy: null, f: null, confidence: 0 };
     // convert size
     const toBase = (v, u, cat) => {
       if (u === 'kg' || /^kilogram/.test(u)) return { v: v * 1000, u: 'g' };
@@ -1158,7 +1291,8 @@ const SCP = (function (SC) {
       return null;
     };
     if (match) {
-      const o = match.obj; row.category = o.category; row.brand = o.brand; row.name = o.name; row.confidence = match.score;
+      const o = match.obj; row.category = o.category; row.brand = o.brand; row.name = match.kind === 'entry' ? CATLG.displayName(o) : o.name; row.confidence = match.score;
+      row.intensity = match.kind === 'entry' ? (o.intensity === undefined ? null : o.intensity) : (o.capsule && o.capsule.intensity !== undefined ? o.capsule.intensity : null);
       if (match.kind === 'preset' && o.category !== 'capsule') {
         // keep a brand the user typed (e.g. "Oatly") but reuse the preset's specs
         const have = new Set(tokensOf(o.brand + ' ' + o.name)); const kw = CAT_KW.find((k) => k[0] === o.category)[1];
@@ -1166,7 +1300,8 @@ const SCP = (function (SC) {
         const pre = (kwIdx > 0 ? words.slice(0, kwIdx) : []).filter((w) => !have.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')));
         if (pre.length) row.brand = titleCase(pre.slice(0, 3).join(' '));
       }
-      if (match.kind === 'product') { row.matchedProductId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
+      if (match.kind === 'entry') { row.catalogId = o.id; row.dairy = CATS[o.category].dairy; row.unit = CATS[o.category].unit; const ds = CATLG.toForm(o).size; row.size = ds === '' ? null : ds; }
+      else if (match.kind === 'product') { row.matchedProductId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
       else { row.presetId = o.id; row.size = o.size; row.unit = o.unit; row.dairy = o.dairy; }
     }
     if (row.category) {
@@ -1199,7 +1334,7 @@ const SCP = (function (SC) {
       if (row.category) row.dairy = CATS[row.category].dairy;
     }
     // a line only counts as a receipt item if it has a price, a pack size, or is a known product (so a shop called "TEA SHOP" is not an item)
-    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, '')) && (row.price !== null || !row.sizeGuessed || !!row.presetId || !!row.matchedProductId);
+    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, '')) && (row.price !== null || !row.sizeGuessed || !!row.presetId || !!row.catalogId || !!row.matchedProductId);
     if (!orig) return null;
     return row;
   }
@@ -1241,11 +1376,11 @@ const SCP = (function (SC) {
   }
   // turn a confirm row into form data for SC.validateProductInput
   function rowToForm(row) {
-    const C = CATS[row.category] || CATS.other; const preset = row.presetId ? SC.PRESETS.find((p) => p.id === row.presetId) : null;
-    const f = preset ? SC.presetToForm(preset) : { category: row.category, density: C.density, shelfLifeDays: C.shelf, dairy: row.dairy !== null ? row.dairy : C.dairy, caffeine: '', shots: 1 };
+    const C = CATS[row.category] || CATS.other; const preset = row.presetId ? SC.PRESETS.find((p) => p.id === row.presetId) : null; const entry = row.catalogId ? CATLG.byId(row.catalogId) : null;
+    const f = entry ? CATLG.toForm(entry, row.size) : preset ? SC.presetToForm(preset) : { category: row.category, density: C.density, shelfLifeDays: C.shelf, dairy: row.dairy !== null ? row.dairy : C.dairy, caffeine: '', shots: 1 };
     f.brand = row.brand; f.name = row.name; f.size = row.size; f.unit = row.unit; f.price = row.price === null || row.price === undefined ? '' : row.price; f.category = row.category;
     if (row.dairy !== null && row.dairy !== undefined) f.dairy = row.dairy;
-    if (row.category === 'capsule') { f.sleeves = row.sleeves || 0; f.loose = row.loose || 0; if (!f.system) f.system = /vertuo/i.test(row.name + row.brand) ? 'vertuo' : 'original'; if (!f.intensity) f.intensity = 6; }
+    if (row.category === 'capsule') { f.sleeves = row.sleeves || 0; f.loose = row.loose || 0; if (!f.system) f.system = /vertuo/i.test(row.name + row.brand) ? 'vertuo' : 'original'; if (row.intensity !== null && row.intensity !== undefined && row.intensity !== '') f.intensity = row.intensity; else if (f.intensity === undefined) f.intensity = ''; } // never guess an intensity: it is printed on the sleeve
     else { f.sealed = row.packs; f.openMode = 'none'; }
     return f;
   }
@@ -1438,7 +1573,7 @@ const SCP = (function (SC) {
       steps: (d.steps || []).map((s) => String(s).trim()).filter(Boolean), note: String(d.note || '').slice(0, 300), sourceLink: d.sourceLink ? String(d.sourceLink).slice(0, 300) : '' } };
   }
 
-  return { normalize, categoryOf, tokensOf, parseProductLine, parsePhotoLabel, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
+  return { matchCatalogue, normalize, categoryOf, tokensOf, parseProductLine, parsePhotoLabel, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
 })(typeof module !== 'undefined' ? require('./core.js') : SC);
 if (typeof module !== 'undefined') module.exports = SCP;
 
@@ -2365,18 +2500,19 @@ function openProductForm(o) {
     f = { category: p.category, brand: p.brand, name: p.name, size: p.size, unit: p.unit, price: p.price === null ? '' : p.price, dairy: p.dairy, density: p.density, shelfLifeDays: p.shelfLifeDays === null ? '' : p.shelfLifeDays, caffeine: p.caffeine === null ? '' : p.caffeine,
       system: p.capsule ? p.capsule.system : 'original', intensity: p.capsule ? p.capsule.intensity : '', cupSize: p.capsule && p.capsule.cupSize ? p.capsule.cupSize : '', shots: p.capsule ? p.capsule.shots : 1, gramsPerShot: p.gramsPerShot || SC.GRAMS_PER_SHOT, usual: !!p.usual };
   } else f = Object.assign(productDefaults(o.category || (o.f && o.f.category) || 'matcha'), o.f || {});
-  openSheet('product', { id: id, f: f, errors: {} });
+  openSheet('product', { id: id, f: f, errors: {}, pick: { brand: '', product: '', size: '' } });
 }
 SHEETS.product = (d) => {
   const f = d.f, e = d.errors, isNew = !d.id, cat = f.category, C = SC.CATEGORIES[cat] || SC.CATEGORIES.other, isCap = cat === 'capsule';
   const cats = Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || cat === 'capsule');
   let b = '<form data-submit="product" id="pform" novalidate>' + selectField('category', 'Category', cats.map((c) => [c, catLabel(c)]), cat, { change: 'pfCat', err: e.category });
   if (!isNew) b = b.replace('<select ', '<select disabled ');
+  if (isNew) b += pickHtml(d);
   b += field('brand', 'Brand', f.brand, { err: e.brand, auto: 'off', ph: 'e.g. Brand A' }) + field('name', 'Product name', f.name, { err: e.name, ph: isCap ? 'e.g. Original Livanto' : 'e.g. Ceremonial matcha' });
   if (isCap) {
     b += field('size', 'Capsules per sleeve', f.size, { type: 'number', int: true, err: e.size });
     b += selectField('system', 'Machine system', [['original', 'Original'], ['vertuo', 'Vertuo']], f.system, { err: e.system });
-    b += '<div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', f.intensity, { type: 'number', int: true, err: e.intensity }) + '</div><div>' + field('shots', 'Shots per capsule', f.shots, { type: 'number', int: true, err: e.shots }) + '</div></div>';
+    b += '<div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', f.intensity, { type: 'number', int: true, err: e.intensity, hint: 'Printed on the sleeve.' }) + '</div><div>' + field('shots', 'Shots per capsule', f.shots, { type: 'number', int: true, err: e.shots }) + '</div></div>';
     b += '<div class="grid2"><div>' + field('cupSize', 'Cup size (ml)', f.cupSize, { type: 'number', err: e.cupSize }) + '</div><div>' + field('caffeine', 'Caffeine per capsule (mg)', f.caffeine, { type: 'number', err: e.caffeine, ph: 'default ' + SC.SHOT_CAFFEINE * (Number(f.shots) || 1) }) + '</div></div>';
   } else {
     b += '<div class="grid2"><div>' + field('size', 'Pack size', f.size, { type: 'number', err: e.size }) + '</div><div>' + (cat === 'other' ? selectField('unit', 'Unit', [['g', 'g'], ['ml', 'ml']], f.unit) : '<label class="f">Unit</label><input value="' + esc(C.unit) + '" disabled aria-label="Unit"><input type="hidden" name="unit" value="' + esc(C.unit) + '">') + '</div></div>';
@@ -2397,10 +2533,56 @@ SHEETS.product = (d) => {
   b += '</form>';
   return { title: isNew ? 'Add a product' : 'Edit product', body: b, footer: footBtns('closeSheet', 1, isNew ? 'Save product' : 'Save changes', 'saveProduct') };
 };
-function syncProductForm() { const form = $('#pform'); if (form && SHEET && SHEET.name === 'product') Object.assign(SHEET.data.f, formData(form)); }
+function syncProductForm() {
+  const form = $('#pform'); if (!form || !SHEET || SHEET.name !== 'product') return;
+  const v = formData(form); Object.keys(v).forEach((k) => { if (k.indexOf('pk_') !== 0) SHEET.data.f[k] = v[k]; }); // dropdown choices live in d.pick, not in the product
+}
+
+// ---------- brand / product / pack-size dropdowns (catalogue in catalog.js; "Other" always lets the user type) ----------
+const PK_FIELDS = ['category', 'brand', 'name', 'size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'caffeine', 'system', 'intensity', 'cupSize', 'shots'];
+const pkSystems = (cat) => (cat === 'capsule' ? { systems: SC.machineSystems(S) } : {});
+function pickBrandLists(cat) {
+  const catalog = CATALOG.brands(cat, pkSystems(cat)); const low = new Set(catalog.map((x) => x.toLowerCase())); const mine = [];
+  S.products.forEach((p) => { if (p.category === cat && !low.has(p.brand.toLowerCase()) && mine.indexOf(p.brand) < 0) mine.push(p.brand); });
+  return { catalog: catalog, mine: mine.sort((a, b) => a.localeCompare(b)) };
+}
+function pickHtml(d) {
+  const f = d.f, cat = f.category; const pk = d.pick || (d.pick = { brand: '', product: '', size: '' }); const lists = pickBrandLists(cat);
+  if (!lists.catalog.length && !lists.mine.length) return '';
+  const opt = (v, t, cur) => '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(t) + '</option>';
+  const sel = (name, label, inner) => '<label class="f" for="f-' + name + '">' + esc(label) + '</label><select id="f-' + name + '" name="' + name + '" data-change="pfPick">' + inner + '</select>';
+  let h = '<div class="pickbox"><div class="small muted" style="margin-top:8px">Pick from the list, or choose “Other” and type it below.</div>' +
+    sel('pk_brand', 'Brand', opt('', 'Choose a brand…', pk.brand) + lists.catalog.map((b) => opt(b, b, pk.brand)).join('') + (lists.mine.length ? '<optgroup label="Your brands">' + lists.mine.map((b) => opt(b, b, pk.brand)).join('') + '</optgroup>' : '') + opt('__other', 'Other (type it)', pk.brand));
+  if (lists.catalog.indexOf(pk.brand) >= 0) {
+    const groups = CATALOG.products(pk.brand, cat, pkSystems(cat)); const cap = cat === 'capsule';
+    h += sel('pk_product', cap ? 'Flavour' : 'Product', opt('', cap ? 'Choose a flavour…' : 'Choose a product…', pk.product) + groups.map((g) => '<optgroup label="' + esc(g.line) + '">' + g.items.map((e) => opt(e.id, e.name, pk.product)).join('') + '</optgroup>').join('') + opt('__other', 'Other (type it)', pk.product));
+    const e = CATALOG.byId(pk.product); const unit = SC.CATEGORIES[cat].unit;
+    if (e && e.sizes && (e.sizes.length > 1 || e.sizesTypical)) h += sel('pk_size', cap ? 'Capsules per sleeve' : 'Pack size', opt('', 'Choose a size…', pk.size) + e.sizes.map((s) => opt(String(s), s + (cap ? ' capsules' : ' ' + unit), pk.size)).join('') + opt('__other', 'Other (type it)', pk.size));
+    const hint = e ? CATALOG.hint(e) : ''; if (hint) h += '<div class="small" style="color:var(--warn);margin-top:6px">' + esc(hint) + '</div>';
+  }
+  return h + '</div>';
+}
+CHG.pfPick = (el) => {
+  syncProductForm(); const d = SHEET.data; const f = d.f; const pk = d.pick = d.pick || { brand: '', product: '', size: '' }; const v = el.value;
+  const clear = (...ks) => ks.forEach((k) => { f[k] = ''; });
+  if (el.name === 'pk_brand') {
+    const prev = pk.brand; const wasCatalogue = pickBrandLists(f.category).catalog.indexOf(prev) >= 0;
+    if (wasCatalogue && f.brand === prev) clear('brand'); if (pk.product) { clear('name', 'intensity', 'cupSize', 'caffeine'); if (f.category === 'capsule') f.shots = 1; }
+    d.pick = { brand: v, product: '', size: '' }; if (v && v !== '__other') f.brand = v;
+    if (f.category !== 'capsule' && pk.product) { const C = SC.CATEGORIES[f.category]; f.size = C.size; f.shelfLifeDays = C.shelf === null ? '' : C.shelf; }
+  } else if (el.name === 'pk_product') {
+    if (v === '__other' || v === '') { if (pk.product && pk.product !== '__other') clear('name', 'intensity', 'cupSize', 'caffeine'); pk.product = v; pk.size = ''; }
+    else { const entry = CATALOG.byId(v); if (entry) { const F = CATALOG.toForm(entry); PK_FIELDS.forEach((k) => { f[k] = F[k]; }); pk.product = v; pk.size = F.size === '' ? '' : String(F.size); } }
+  } else if (el.name === 'pk_size') {
+    pk.size = v; if (v === '__other' || v === '') f.size = ''; else f.size = Number(v);
+  }
+  d.errors = {}; renderSheet();
+};
 CHG.pfCat = (el) => {
-  syncProductForm(); const f = SHEET.data.f; const nf = productDefaults(el.value);
-  ['size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'shots', 'gramsPerShot'].forEach((k) => { f[k] = nf[k]; }); f.category = el.value; f.system = f.system || nf.system; SHEET.data.errors = {}; renderSheet();
+  syncProductForm(); const d = SHEET.data; const f = d.f; const nf = productDefaults(el.value);
+  if (d.pick && (d.pick.brand || d.pick.product)) { ['brand', 'name', 'intensity', 'cupSize', 'caffeine'].forEach((k) => { f[k] = ''; }); } // the list pick belonged to the old category
+  d.pick = { brand: '', product: '', size: '' };
+  ['size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'shots', 'gramsPerShot'].forEach((k) => { f[k] = nf[k]; }); f.category = el.value; f.system = f.system || nf.system; d.errors = {}; renderSheet();
 };
 CHG.pfMode = () => { syncProductForm(); renderSheet(); };
 ACT.saveProduct = () => { const form = $('#pform'); if (form) SUB.product(form); };
@@ -2493,7 +2675,7 @@ function rowHtml(r, i) {
     (r.matchedProductId ? '' : '<div class="grid2"><div>' + field('r' + i + '_brand', 'Brand', r.brand, { err: r.errors && r.errors.brand }) + '</div><div>' + field('r' + i + '_name', 'Name', r.name, { err: r.errors && r.errors.name }) + '</div></div>' +
       selectField('r' + i + '_category', 'Category', Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || r.category === 'capsule').map((c) => [c, catLabel(c)]), r.category || 'other', { change: 'rowField' }) +
       '<div class="grid2"><div>' + field('r' + i + '_size', cap ? 'Capsules per sleeve' : 'Pack size (' + (r.unit || '') + ')', r.size, { type: 'number', err: r.errors && r.errors.size }) + '</div><div>' + field('r' + i + '_price', 'Price per pack', r.price === null ? '' : r.price, { type: 'number', err: r.errors && r.errors.price }) + '</div></div>') +
-    (cap ? '<div class="grid2"><div>' + field('r' + i + '_sleeves', 'Sleeves', r.sleeves === null ? 0 : r.sleeves, { type: 'number', int: true }) + '</div><div>' + field('r' + i + '_loose', 'Loose capsules', r.loose || 0, { type: 'number', int: true }) + '</div></div>' : field('r' + i + '_packs', 'Packs bought', r.packs, { type: 'number', int: true, err: r.errors && r.errors.sealed })) + '</div>' : '') + '</div>';
+    (cap ? '<div class="grid2"><div>' + field('r' + i + '_sleeves', 'Sleeves', r.sleeves === null ? 0 : r.sleeves, { type: 'number', int: true }) + '</div><div>' + field('r' + i + '_loose', 'Loose capsules', r.loose || 0, { type: 'number', int: true }) + '</div></div>' + (r.matchedProductId ? '' : field('r' + i + '_intensity', 'Intensity (1–13)', r.intensity === null || r.intensity === undefined ? '' : r.intensity, { type: 'number', int: true, err: r.errors && r.errors.intensity, hint: 'Printed on the sleeve.' })) : field('r' + i + '_packs', 'Packs bought', r.packs, { type: 'number', int: true, err: r.errors && r.errors.sealed })) + '</div>' : '') + '</div>';
 }
 SHEETS.confirmRows = (d) => {
   const n = d.rows.filter((r) => r.include).length;
@@ -2510,6 +2692,7 @@ function syncRows() {
     const cat = f['r' + i + '_category']; if (cat && cat !== r.category) { r.category = cat; const C = SC.CATEGORIES[cat]; r.unit = C.unit; if (r.sizeGuessed || true) r.size = C.size; r.presetId = null; }
     if (f['r' + i + '_packs'] !== undefined) r.packs = f['r' + i + '_packs'];
     if (f['r' + i + '_sleeves'] !== undefined) { r.sleeves = f['r' + i + '_sleeves']; r.loose = f['r' + i + '_loose']; }
+    if (f['r' + i + '_intensity'] !== undefined) r.intensity = f['r' + i + '_intensity'];
   });
 }
 CHG.rowField = () => { syncRows(); renderSheet(); };
@@ -2719,7 +2902,7 @@ ACT.phParse = () => {
   const d = SHEET.data; d.text = $('#phText').value; const row = SCP.parsePhotoLabel(d.text, S);
   if (!row) { d.err = 'Type or read the label text first.'; renderSheet(); return; }
   const cat = row.category || 'other'; const C = SC.CATEGORIES[cat];
-  openSheet('photoConfirm', { row: row, category: cat, brand: row.brand || '', name: row.name || '', size: row.size || C.size, unit: row.unit || C.unit, price: row.price === null || row.price === undefined ? '' : row.price, fill: 'full', extra: 0, sleeves: cat === 'capsule' ? (row.sleeves === null || row.sleeves === undefined ? 1 : row.sleeves) : 0, loose: row.loose || 0, errors: {}, matchId: row.matchedProductId || null, known: !!row.category, sizeFound: row.sizeFound });
+  openSheet('photoConfirm', { row: row, category: cat, brand: row.brand || '', name: row.name || '', size: row.size || C.size, unit: row.unit || C.unit, price: row.price === null || row.price === undefined ? '' : row.price, fill: 'full', extra: 0, sleeves: cat === 'capsule' ? (row.sleeves === null || row.sleeves === undefined ? 1 : row.sleeves) : 0, loose: row.loose || 0, errors: {}, intensity: row.intensity === null || row.intensity === undefined ? '' : row.intensity, matchId: row.matchedProductId || null, known: !!row.category, sizeFound: row.sizeFound });
 };
 SHEETS.photoConfirm = (d) => {
   const e = d.errors || {}; const cap = d.category === 'capsule'; const existing = d.matchId ? S.products.find((p) => p.id === d.matchId) : null;
@@ -2729,11 +2912,11 @@ SHEETS.photoConfirm = (d) => {
     '<form id="phform" novalidate>' + selectField('category', 'Category', Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || d.category === 'capsule').map((c) => [c, catLabel(c)]), d.category, { change: 'phField' }) +
     '<div class="grid2"><div>' + field('brand', 'Brand', d.brand, { err: e.brand }) + '</div><div>' + field('name', 'Name', d.name, { err: e.name }) + '</div></div>' +
     '<div class="grid2"><div>' + field('size', cap ? 'Capsules per sleeve' : 'Pack size (' + d.unit + ')', d.size, { type: 'number', err: e.size }) + '</div><div>' + field('price', 'Price per pack (optional)', d.price, { type: 'number', err: e.price }) + '</div></div></form>';
-  if (cap) b += '<h2>How many?</h2><div class="grid2"><div>' + field('sleeves', 'Sleeves', d.sleeves, { type: 'number', int: true, err: e.sleeves, change: 'phField' }) + '</div><div>' + field('loose', 'Loose capsules', d.loose, { type: 'number', int: true, err: e.loose, change: 'phField' }) + '</div></div>';
+  if (cap) b += '<h2>Capsule details</h2><div class="grid2"><div>' + field('intensity', 'Intensity (1–13)', d.intensity, { type: 'number', int: true, err: e.intensity, hint: 'Printed on the sleeve.' }) + '</div><div></div></div><h2>How many?</h2><div class="grid2"><div>' + field('sleeves', 'Sleeves', d.sleeves, { type: 'number', int: true, err: e.sleeves, change: 'phField' }) + '</div><div>' + field('loose', 'Loose capsules', d.loose, { type: 'number', int: true, err: e.loose, change: 'phField' }) + '</div></div>';
   else b += '<h2>How full is it?</h2><div class="chips" style="flex-wrap:wrap" role="group" aria-label="How full">' + FILL_CHIPS.map((c) => '<button class="chip" aria-pressed="' + (d.fill === c[0]) + '" data-act="phFill" data-v="' + c[0] + '">' + c[1] + '</button>').join('') + '</div><div class="small muted">' + (d.fill === 'full' ? 'Counts as one sealed pack.' : d.fill === 'unsure' ? 'Saved as “unknown amount”. You can recount it later.' : 'Saved as one opened pack, about ' + Math.round((SC.FILL[d.fill] || 0) * 100) + '% full (' + fmt((SC.FILL[d.fill] || 0) * (Number(d.size) || 0)) + ' ' + d.unit + ').') + '</div>' + field('extra', 'More sealed packs of this', d.extra, { type: 'number', int: true, err: e.sealed, change: 'phField' });
   return { title: 'Check this item', body: b, footer: '<button data-act="phBack">Back</button><button class="primary" data-act="phSave">Add to pantry</button>' };
 };
-function syncPhoto() { const f = $('#phform'); if (!f) return; const v = formData(f); const d = SHEET.data; ['brand', 'name', 'size', 'price'].forEach((k) => { if (v[k] !== undefined) d[k] = v[k]; }); ['extra', 'sleeves', 'loose'].forEach((k) => { const el = $('#f-' + k); if (el) d[k] = el.value; }); if (v.category) d.category = v.category; }
+function syncPhoto() { const f = $('#phform'); if (!f) return; const v = formData(f); const d = SHEET.data; ['brand', 'name', 'size', 'price'].forEach((k) => { if (v[k] !== undefined) d[k] = v[k]; }); ['extra', 'sleeves', 'loose', 'intensity'].forEach((k) => { const el = $('#f-' + k); if (el) d[k] = el.value; }); if (v.category) d.category = v.category; }
 CHG.phField = (el) => {
   syncPhoto(); const d = SHEET.data;
   if (el.name === 'category') { const C = SC.CATEGORIES[d.category]; d.unit = C.unit; if (!d.sizeFound || true) d.size = d.row && d.row.category === d.category ? d.row.size : C.size; d.known = true; if (d.category === 'capsule' && !Number(d.sleeves)) d.sleeves = 1; }
@@ -2744,7 +2927,7 @@ ACT.phBack = () => { const d = SHEET.data; openSheet('photoAdd', { text: (d.row 
 ACT.phRecount = (el) => { releasePhoto(); closeSheet(); openRecount(el.dataset.id); };
 ACT.phSave = () => {
   syncPhoto(); const d = SHEET.data; const cap = d.category === 'capsule';
-  const row = Object.assign({}, d.row, { category: d.category, brand: d.brand, name: d.name, size: d.size, unit: d.unit, price: d.price === '' ? null : d.price, presetId: d.row && d.row.category === d.category ? d.row.presetId : null, sleeves: Number(d.sleeves) || 0, loose: Number(d.loose) || 0, packs: 1 });
+  const row = Object.assign({}, d.row, { category: d.category, brand: d.brand, name: d.name, size: d.size, unit: d.unit, price: d.price === '' ? null : d.price, presetId: d.row && d.row.category === d.category ? d.row.presetId : null, catalogId: d.row && d.row.category === d.category ? d.row.catalogId : null, intensity: d.intensity, sleeves: Number(d.sleeves) || 0, loose: Number(d.loose) || 0, packs: 1 });
   const f = SCP.rowToForm(row); f.brand = d.brand; f.name = d.name; f.size = d.size; f.price = d.price; f.category = d.category;
   if (cap) { f.sleeves = d.sleeves; f.loose = d.loose; } else { f.sealed = (d.fill === 'full' ? 1 : 0) + (Number(d.extra) || 0); f.openMode = d.fill === 'full' ? 'none' : d.fill === 'unsure' ? 'unknown' : d.fill; f.openDate = today(); f.unit = d.unit; }
   const v = SC.validateProductInput(f, { withStock: true, today: today() }); if (v.ok && cap && !v.value.count) { v.ok = false; v.errors.sleeves = 'Enter how many capsules you have'; }
