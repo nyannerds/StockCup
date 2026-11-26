@@ -3,7 +3,7 @@
    - vendor/ocr/* (about 11 MB) is cached the first time the receipt/photo reader uses it, then works offline.
    - A new version waits until the user taps "Reload" in the app, so an edit in progress is never interrupted.
    - Cross-origin requests (for example the sync server) and non-GET requests are never touched. */
-const VERSION = 'e20b9404b5';
+const VERSION = 'bf835dffb2';
 const SHELL_CACHE = 'stockcup-shell-' + VERSION;
 const OCR_CACHE = 'stockcup-ocr-v1';
 const SHELL = ["./","index.html","config.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"];

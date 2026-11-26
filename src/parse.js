@@ -63,14 +63,17 @@ const SCP = (function (SC) {
     SC.PRESETS.forEach((p) => consider('preset', p));
     // brand catalogue (strictly better than a product/preset match to win, so existing behaviour is unchanged where they overlap)
     const nameTok = (e) => tokensOf(CATLG.displayName(e)); const qset = new Set(q);
+    let bestE = null;
     CATLG.entries.forEach((e) => {
       if (category && e.category !== category) return;
       const info = CATLG.brandInfo[e.brand]; const names = [e.brand].concat((info && info.aliases) || []); let sc = 0;
       names.forEach((bn) => { sc = Math.max(sc, jaccard(q, tokensOf(bn + ' ' + CATLG.displayName(e)))); });
       // a distinctive product name on its own ("Wako", "Ummon") is enough when nothing else in the catalogue has it
       const nt = nameTok(e); if (e.distinct && nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
-      if (sc > best.score) best = { score: sc, kind: 'entry', obj: e };
+      const rank = sc > 0 && String(text).toLowerCase().indexOf(CATLG.displayName(e).toLowerCase()) >= 0 ? sc + 0.01 : sc; // "Okumidori 2.0" beats "Okumidori" when the text says 2.0
+      if (!bestE || rank > bestE.rank) bestE = { rank: rank, score: sc, obj: e };
     });
+    if (bestE && bestE.score > best.score) best = { score: bestE.score, kind: 'entry', obj: bestE.obj }; // a product or preset you already have wins ties
     return best.score >= 0.5 ? best : null;
   }
 

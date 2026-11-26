@@ -81,7 +81,7 @@ Pantry → ＋ Add → **Enter all the details**: under Category, choose a **Bra
 then a **Pack size**. The fields below fill in and stay editable. Every list ends with **Other (type it)**, and brands you type yourself appear under **Your brands** next time.
 Capsule lists only show flavours for the machines you have. Typed lines, labels and receipts ("Marukyu Koyamaen Wako 40g") are matched against the same list.
 
-The list lives in `src/catalog.js` and is a **hand-compiled starter list, not authoritative**: Nespresso (Original and Vertuo), Marukyu Koyamaen, Yamamasa Koyamaen, Ippodo, Aiya, Top Creamery (TOP Series syrups), Lavazza, illy, Starbucks and Twinings.
+The list lives in `src/catalog.js` and is a **hand-compiled starter list, not authoritative**: Nespresso (Original and Vertuo), Marukyu Koyamaen, Yamamasa Koyamaen, Kumatcha, Ippodo, Aiya, Top Creamery (TOP Series syrups), Lavazza, illy, Starbucks and Twinings.
 Names were checked against public listings (brand sites could not be reached when it was written). Numbers are filled only when known; ones recalled but not confirmed are flagged
 "check your box" in the form, unknown ones (most Vertuo intensities, many cup sizes) are left blank, and pack sizes marked "typical" are never pre-selected. To add or fix an entry,
 edit `src/catalog.js` and run `npm test` (`tests/catalog.test.js` checks every entry).

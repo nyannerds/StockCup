@@ -1107,14 +1107,20 @@ const CATALOG = (function (SC) {
 
   // ---------- Matcha and hojicha ----------
   const typical = { sizes: [20, 30, 40, 100], sizesTypical: true, distinct: true }; // distinct: the product name alone identifies it (Wako, Ummon...)
-  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu', 'Marukyu Koyamaen Matcha']);
+  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu']);
   add('Marukyu Koyamaen', 'matcha', 'Matcha', ['Isuzu', 'Aoarashi', 'Yugen', 'Wako', 'Kinrin', 'Chigi no Shiro'], typical);
   add('Marukyu Koyamaen', 'hojicha', 'Hojicha powder', ['Hojicha Powder A', 'Hojicha Powder B'], { sizes: [40, 100, 200], sizesTypical: true });
-  brand('Ippodo', ['matcha', 'tea'], ['Ippodo Tea', 'Ippodo Tea Co', 'Ippodo Tea Co.']);
+  brand('Ippodo', ['matcha', 'tea'], []);
   add('Ippodo', 'matcha', 'Matcha', [['Ummon-no-mukashi', { sizes: [20, 40], sizesConfirmed: true }], ['Sayaka-no-mukashi', { sizes: [20, 40, 100], sizesConfirmed: true }]], { distinct: true });
   add('Ippodo', 'tea', 'Roasted green tea (leaves)', [['Gokujo Hojicha', { sizes: [80, 100], sizesTypical: true }]]);
-  brand('Yamamasa Koyamaen', ['matcha'], ['Yamamasa', 'Yamamasa-Koyamaen', 'Yamamasa Koyamaen Matcha']);
+  brand('Yamamasa Koyamaen', ['matcha'], ['Yamamasa', 'Yamamasa-Koyamaen']);
   add('Yamamasa Koyamaen', 'matcha', 'Matcha', [['Matsukaze', { sizes: [30, 100], sizesTypical: false, sizesConfirmed: true }], ['Ogurayama', { sizes: [40, 100], sizesTypical: false, sizesConfirmed: true }], 'Samidori', 'Yomo no Kaori', 'Tennouzan', 'Wakakusa'], typical);
+  // Names as listed on shopkumatcha.com (supplied by the user from the shop's own product filter; the site itself could not be reached to read pack sizes).
+  // Many are cultivar names (Okumidori, Yabukita, Samidori, Yutakamidori, Sayamakaori, Kirari 31, ...), several are shared with other brands, so none of these
+  // is matched on the product name alone: the brand has to be in the text.
+  brand('Kumatcha', ['matcha'], ['Shop Kumatcha', 'shopkumatcha']); // no alias containing the bare word "matcha": it would make every "X matcha" look like a Kumatcha product
+  add('Kumatcha', 'matcha', 'Matcha (cultivars and blends)', ['Okashi', 'Honmei', 'Mitsu', 'Haru', 'Kanaya Midori', 'Okumidori 2.0', 'Okumidori', 'Aki', 'Kirei', 'Yugen', 'Koi', 'Asahi', 'Samidori', 'Uji Hikari', 'Kasumi', 'Oyatsu',
+    'Sayamakaori', 'Yutakamidori', 'Ren', 'Uji No Mukashi', 'Yabukita', 'Sora', 'Tsuki', 'Gokou', 'Kirari 31', 'Wet Market Exclusive'], { sizes: [20, 30, 40, 100], sizesTypical: true, distinct: false });
   brand('Aiya', ['matcha'], ['AIYA', 'Aiya America']);
   add('Aiya', 'matcha', 'Matcha', [['Organic Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Premium First Harvest Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Organic Culinary Grade', { sizes: [100], sizesConfirmed: true }]]);
 
@@ -1246,14 +1252,17 @@ const SCP = (function (SC) {
     SC.PRESETS.forEach((p) => consider('preset', p));
     // brand catalogue (strictly better than a product/preset match to win, so existing behaviour is unchanged where they overlap)
     const nameTok = (e) => tokensOf(CATLG.displayName(e)); const qset = new Set(q);
+    let bestE = null;
     CATLG.entries.forEach((e) => {
       if (category && e.category !== category) return;
       const info = CATLG.brandInfo[e.brand]; const names = [e.brand].concat((info && info.aliases) || []); let sc = 0;
       names.forEach((bn) => { sc = Math.max(sc, jaccard(q, tokensOf(bn + ' ' + CATLG.displayName(e)))); });
       // a distinctive product name on its own ("Wako", "Ummon") is enough when nothing else in the catalogue has it
       const nt = nameTok(e); if (e.distinct && nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
-      if (sc > best.score) best = { score: sc, kind: 'entry', obj: e };
+      const rank = sc > 0 && String(text).toLowerCase().indexOf(CATLG.displayName(e).toLowerCase()) >= 0 ? sc + 0.01 : sc; // "Okumidori 2.0" beats "Okumidori" when the text says 2.0
+      if (!bestE || rank > bestE.rank) bestE = { rank: rank, score: sc, obj: e };
     });
+    if (bestE && bestE.score > best.score) best = { score: bestE.score, kind: 'entry', obj: bestE.obj }; // a product or preset you already have wins ties
     return best.score >= 0.5 ? best : null;
   }
 

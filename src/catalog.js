@@ -52,14 +52,20 @@ const CATALOG = (function (SC) {
 
   // ---------- Matcha and hojicha ----------
   const typical = { sizes: [20, 30, 40, 100], sizesTypical: true, distinct: true }; // distinct: the product name alone identifies it (Wako, Ummon...)
-  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu', 'Marukyu Koyamaen Matcha']);
+  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu']);
   add('Marukyu Koyamaen', 'matcha', 'Matcha', ['Isuzu', 'Aoarashi', 'Yugen', 'Wako', 'Kinrin', 'Chigi no Shiro'], typical);
   add('Marukyu Koyamaen', 'hojicha', 'Hojicha powder', ['Hojicha Powder A', 'Hojicha Powder B'], { sizes: [40, 100, 200], sizesTypical: true });
-  brand('Ippodo', ['matcha', 'tea'], ['Ippodo Tea', 'Ippodo Tea Co', 'Ippodo Tea Co.']);
+  brand('Ippodo', ['matcha', 'tea'], []);
   add('Ippodo', 'matcha', 'Matcha', [['Ummon-no-mukashi', { sizes: [20, 40], sizesConfirmed: true }], ['Sayaka-no-mukashi', { sizes: [20, 40, 100], sizesConfirmed: true }]], { distinct: true });
   add('Ippodo', 'tea', 'Roasted green tea (leaves)', [['Gokujo Hojicha', { sizes: [80, 100], sizesTypical: true }]]);
-  brand('Yamamasa Koyamaen', ['matcha'], ['Yamamasa', 'Yamamasa-Koyamaen', 'Yamamasa Koyamaen Matcha']);
+  brand('Yamamasa Koyamaen', ['matcha'], ['Yamamasa', 'Yamamasa-Koyamaen']);
   add('Yamamasa Koyamaen', 'matcha', 'Matcha', [['Matsukaze', { sizes: [30, 100], sizesTypical: false, sizesConfirmed: true }], ['Ogurayama', { sizes: [40, 100], sizesTypical: false, sizesConfirmed: true }], 'Samidori', 'Yomo no Kaori', 'Tennouzan', 'Wakakusa'], typical);
+  // Names as listed on shopkumatcha.com (supplied by the user from the shop's own product filter; the site itself could not be reached to read pack sizes).
+  // Many are cultivar names (Okumidori, Yabukita, Samidori, Yutakamidori, Sayamakaori, Kirari 31, ...), several are shared with other brands, so none of these
+  // is matched on the product name alone: the brand has to be in the text.
+  brand('Kumatcha', ['matcha'], ['Shop Kumatcha', 'shopkumatcha']); // no alias containing the bare word "matcha": it would make every "X matcha" look like a Kumatcha product
+  add('Kumatcha', 'matcha', 'Matcha (cultivars and blends)', ['Okashi', 'Honmei', 'Mitsu', 'Haru', 'Kanaya Midori', 'Okumidori 2.0', 'Okumidori', 'Aki', 'Kirei', 'Yugen', 'Koi', 'Asahi', 'Samidori', 'Uji Hikari', 'Kasumi', 'Oyatsu',
+    'Sayamakaori', 'Yutakamidori', 'Ren', 'Uji No Mukashi', 'Yabukita', 'Sora', 'Tsuki', 'Gokou', 'Kirari 31', 'Wet Market Exclusive'], { sizes: [20, 30, 40, 100], sizesTypical: true, distinct: false });
   brand('Aiya', ['matcha'], ['AIYA', 'Aiya America']);
   add('Aiya', 'matcha', 'Matcha', [['Organic Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Premium First Harvest Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Organic Culinary Grade', { sizes: [100], sizesConfirmed: true }]]);
 
