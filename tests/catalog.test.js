@@ -47,7 +47,9 @@ test('Yamamasa Koyamaen and Top Creamery TOP Series are present with only what w
 });
 test('Kumatcha: exactly the 26 products from the shop, none matched on the name alone', () => {
   const names = ['Okashi', 'Honmei', 'Mitsu', 'Haru', 'Kanaya Midori', 'Okumidori 2.0', 'Okumidori', 'Aki', 'Kirei', 'Yugen', 'Koi', 'Asahi', 'Samidori', 'Uji Hikari', 'Kasumi', 'Oyatsu', 'Sayamakaori', 'Yutakamidori', 'Ren', 'Uji No Mukashi', 'Yabukita', 'Sora', 'Tsuki', 'Gokou', 'Kirari 31', 'Wet Market Exclusive'];
-  const ks = E.filter((e) => e.brand === 'Kumatcha'); assert.deepStrictEqual(ks.map((e) => e.name), names); assert.ok(ks.every((e) => e.category === 'matcha' && e.sizesTypical === true && !e.distinct && !e.intensity));
+  const ks = E.filter((e) => e.brand === 'Kumatcha'); assert.deepStrictEqual(ks.map((e) => e.name), names); assert.ok(ks.every((e) => e.category === 'matcha' && !e.sizesTypical && e.sizesConfirmed && !e.distinct && !e.intensity));
+  ks.forEach((e) => assert.deepStrictEqual(e.sizes, ['Honmei', 'Yabukita'].includes(e.name) ? [30, 100] : [30], e.name + ' sizes'));
+  assert.strictEqual(CAT.toForm(ks.find((e) => e.name === 'Haru')).size, 30, 'the single 30 g tin is filled in'); assert.strictEqual(CAT.toForm(ks.find((e) => e.name === 'Honmei')).size, '', 'two sizes: the user chooses'); assert.strictEqual(CAT.hint(ks[0]), '', 'nothing to double-check');
   assert.strictEqual(E.filter((e) => e.name === 'Yugen').length, 2, 'shared with Marukyu Koyamaen, kept apart by brand');
 });
 console.log('dropdown helpers');
@@ -79,8 +81,8 @@ test('Yamamasa and Top Creamery lines are recognised; generic flavour words are 
   const cases = [['Yamamasa Koyamaen Matsukaze 30g', ['matcha', 'Yamamasa Koyamaen', 'Matsukaze', 30]], ['Matsukaze matcha 100g', ['matcha', 'Yamamasa Koyamaen', 'Matsukaze', 100]], ['Koyamaen Wako 40g', ['matcha', 'Marukyu Koyamaen', 'Wako', 40]],
     ['TOP Series Caramel Syrup 750ml', ['syrup', 'Top Creamery', 'Caramel', 750]], ['Top Creamery Classique Hazelnut syrup 750ml', ['syrup', 'Top Creamery', 'Hazelnut', 750]], ['Top Creamery Creamy Vanilla 250ml', ['syrup', 'Top Creamery', 'Creamy Vanilla', 250]]];
   cases.forEach(([l, exp]) => { const r = row(l); assert.deepStrictEqual([r.category, r.brand, r.name, r.size], exp, l); });
-  [['Kumatcha Haru 30g', ['Kumatcha', 'Haru', 30]], ['Kumatcha Okumidori 2.0 40g', ['Kumatcha', 'Okumidori 2.0', 40]], ['Kumatcha Okumidori 40g', ['Kumatcha', 'Okumidori', 40]], ['Shop Kumatcha Yabukita 100g', ['Kumatcha', 'Yabukita', 100]],
-    ['Kumatcha Yugen 40g', ['Kumatcha', 'Yugen', 40]], ['Marukyu Koyamaen Yugen 40g', ['Marukyu Koyamaen', 'Yugen', 40]], ['Kumatcha Kirari 31 30g', ['Kumatcha', 'Kirari 31', 30]]].forEach(([l, exp]) => { const r = row(l); assert.deepStrictEqual([r.brand, r.name, r.size], exp, l); });
+  [['Kumatcha Haru 30g', ['Kumatcha', 'Haru', 30]], ['Kumatcha Okumidori 2.0 30g', ['Kumatcha', 'Okumidori 2.0', 30]], ['Kumatcha Okumidori 30g', ['Kumatcha', 'Okumidori', 30]], ['Kumatcha Haru', ['Kumatcha', 'Haru', 30]], ['Kumatcha Honmei 100g', ['Kumatcha', 'Honmei', 100]], ['Shop Kumatcha Yabukita 100g', ['Kumatcha', 'Yabukita', 100]],
+    ['Kumatcha Yugen 30g', ['Kumatcha', 'Yugen', 30]], ['Marukyu Koyamaen Yugen 40g', ['Marukyu Koyamaen', 'Yugen', 40]], ['Kumatcha Kirari 31 30g', ['Kumatcha', 'Kirari 31', 30]]].forEach(([l, exp]) => { const r = row(l); assert.deepStrictEqual([r.brand, r.name, r.size], exp, l); });
   ['Haru matcha 30g', 'Yugen matcha 40g', 'Samidori matcha 30g', 'Koi matcha 20g', 'Hojicha tea 80g', 'Green tea 100g'].forEach((l) => assert.ok(!row(l).catalogId, l + ' is ambiguous or generic: no brand is assumed'));
   const g = row('Chocolate syrup 250ml'); assert.ok(!g.catalogId && g.brand !== 'Top Creamery', 'a plain chocolate syrup is not assumed to be Top Creamery'); assert.ok(!row('Mango syrup 750ml').catalogId, 'nor a plain mango syrup');
   assert.ok(row('Caramel syrup 750ml').presetId, 'the generic caramel preset still wins');

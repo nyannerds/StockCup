@@ -53,10 +53,12 @@ async function test(n, fn) { try { await fn(); console.log('  ok   ' + n); } cat
     const { ctx, p } = await fresh(); await open(p); assert.ok((await opts(p, 'pk_brand')).includes('Yamamasa Koyamaen')); await p.selectOption('#f-pk_brand', 'Yamamasa Koyamaen'); assert.deepStrictEqual((await opts(p, 'pk_product')).slice(1, 7), ['Matsukaze', 'Ogurayama', 'Samidori', 'Yomo no Kaori', 'Tennouzan', 'Wakakusa']);
     await p.selectOption('#f-pk_product', { label: 'Matsukaze' }); assert.deepStrictEqual((await opts(p, 'pk_size')).slice(1, 3), ['30 g', '100 g']); assert.ok(!/typical/.test(await p.locator('.pickbox').innerText()), 'Matsukaze sizes were seen in a listing'); await ctx.close();
   });
-  await test('Kumatcha lists its 26 cultivars and blends; picking one fills the form and a size must be chosen', async () => {
+  await test('Kumatcha lists its 26 cultivars and blends; 30 g tins are filled in, Honmei and Yabukita ask 30 or 100 g', async () => {
     const { ctx, p } = await fresh(); await open(p); await p.selectOption('#f-pk_brand', 'Kumatcha'); const names = (await opts(p, 'pk_product')).slice(1, -1); assert.strictEqual(names.length, 26); assert.ok(names.includes('Okumidori 2.0') && names.includes('Wet Market Exclusive') && names.includes('Kirari 31'));
-    await p.selectOption('#f-pk_product', { label: 'Okumidori 2.0' }); assert.deepStrictEqual([await val(p, 'brand'), await val(p, 'name'), await val(p, 'size')], ['Kumatcha', 'Okumidori 2.0', '']); await p.selectOption('#f-pk_size', '30'); await p.fill('#f-sealed', '1'); await p.click('[data-act=saveProduct]');
-    const pr = (await state(p)).products[0]; assert.deepStrictEqual([pr.brand, pr.name, pr.size, pr.category], ['Kumatcha', 'Okumidori 2.0', 30, 'matcha']); await ctx.close();
+    await p.selectOption('#f-pk_product', { label: 'Okumidori 2.0' }); assert.deepStrictEqual([await val(p, 'brand'), await val(p, 'name'), await val(p, 'size')], ['Kumatcha', 'Okumidori 2.0', '30']); assert.strictEqual(await p.locator('#f-pk_size').count(), 0, 'everything is a 30 g tin: no size question'); assert.ok(!/Check your box/.test(await p.locator('.pickbox').innerText()));
+    await p.fill('#f-sealed', '1'); await p.click('[data-act=saveProduct]'); const pr = (await state(p)).products[0]; assert.deepStrictEqual([pr.brand, pr.name, pr.size, pr.category], ['Kumatcha', 'Okumidori 2.0', 30, 'matcha']);
+    for (const name of ['Honmei', 'Yabukita']) { await open(p); await p.selectOption('#f-pk_brand', 'Kumatcha'); await p.selectOption('#f-pk_product', { label: name }); assert.strictEqual(await val(p, 'size'), ''); assert.deepStrictEqual((await opts(p, 'pk_size')).slice(1, 3), ['30 g', '100 g']); await p.selectOption('#f-pk_size', '100'); await p.click('[data-act=saveProduct]'); }
+    assert.deepStrictEqual((await state(p)).products.map((x) => [x.name, x.size]), [['Okumidori 2.0', 30], ['Honmei', 100], ['Yabukita', 100]]); await ctx.close();
   });
   console.log('capsules and machines');
   await test('with an Original machine only Original flavours are offered; Livanto fills system, intensity and sleeve size', async () => {
