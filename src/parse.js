@@ -68,7 +68,7 @@ const SCP = (function (SC) {
       const info = CATLG.brandInfo[e.brand]; const names = [e.brand].concat((info && info.aliases) || []); let sc = 0;
       names.forEach((bn) => { sc = Math.max(sc, jaccard(q, tokensOf(bn + ' ' + CATLG.displayName(e)))); });
       // a distinctive product name on its own ("Wako", "Ummon") is enough when nothing else in the catalogue has it
-      const nt = nameTok(e); if (nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
+      const nt = nameTok(e); if (e.distinct && nt.length && nt.join('').length >= 4 && nt.every((t) => qset.has(t)) && CATLG.entries.filter((x) => nameTok(x).join(' ') === nt.join(' ')).length === 1) sc = Math.max(sc, 0.6);
       if (sc > best.score) best = { score: sc, kind: 'entry', obj: e };
     });
     return best.score >= 0.5 ? best : null;

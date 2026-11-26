@@ -36,12 +36,22 @@ async function test(n, fn) { try { await fn(); console.log('  ok   ' + n); } cat
   await test('changing the category clears the old pick; categories without a list still show "Other"-style typing', async () => {
     const { ctx, p } = await fresh(); await open(p); await p.selectOption('#f-pk_brand', 'Marukyu Koyamaen'); await p.selectOption('#f-pk_product', { label: 'Wako' }); await p.selectOption('#f-category', 'coffee');
     assert.strictEqual(await val(p, 'brand'), ''); assert.strictEqual(await val(p, 'name'), ''); assert.strictEqual(await p.inputValue('#f-pk_brand'), ''); assert.ok((await opts(p, 'pk_brand')).includes('Lavazza') && !(await opts(p, 'pk_brand')).includes('Marukyu Koyamaen'));
-    await p.selectOption('#f-category', 'syrup'); assert.strictEqual(await p.locator('#f-pk_brand').count(), 0, 'no catalogue for syrup yet: plain typing'); assert.ok(await p.locator('#f-brand').count()); await ctx.close();
+    await p.selectOption('#f-category', 'milk'); assert.strictEqual(await p.locator('#f-pk_brand').count(), 0, 'no catalogue for milk yet: plain typing'); assert.ok(await p.locator('#f-brand').count()); await ctx.close();
   });
   await test('coffee and tea brands work the same way (sizes in grams)', async () => {
     const { ctx, p } = await fresh(); await open(p, 'coffee'); await p.selectOption('#f-pk_brand', 'illy'); await p.selectOption('#f-pk_product', { label: 'Intenso' }); await p.selectOption('#f-pk_size', '250'); await p.fill('#f-sealed', '1'); await p.click('[data-act=saveProduct]');
     await open(p, 'tea'); await p.selectOption('#f-pk_brand', 'Twinings'); await p.selectOption('#f-pk_product', { label: 'Pure Camomile' }); await p.selectOption('#f-pk_size', '40'); await p.click('[data-act=saveProduct]');
     const s = await state(p); assert.deepStrictEqual(s.products.map((x) => [x.brand, x.name, x.size, x.category]), [['illy', 'Intenso', 250, 'coffee'], ['Twinings', 'Pure Camomile', 40, 'tea']]); assert.strictEqual(s.products[1].caffeine, 0); await ctx.close();
+  });
+  await test('syrups: Top Creamery -> TOP Series Classique -> Hazelnut (750 ml filled in) and Caramel (choose 750 or 250 ml)', async () => {
+    const { ctx, p } = await fresh(); await open(p, 'syrup'); assert.deepStrictEqual((await opts(p, 'pk_brand')).slice(1, 2), ['Top Creamery']); await p.selectOption('#f-pk_brand', 'Top Creamery'); assert.deepStrictEqual(await groups(p, 'pk_product'), ['TOP Series', 'TOP Series Classique', 'TOP Series Sugar Syrups']);
+    await p.selectOption('#f-pk_product', { label: 'Hazelnut' }); assert.deepStrictEqual([await val(p, 'brand'), await val(p, 'name'), await val(p, 'size')], ['Top Creamery', 'Hazelnut', '750']); assert.strictEqual(await p.locator('#f-pk_size').count(), 0, 'single confirmed size: no extra dropdown'); await p.fill('#f-sealed', '1'); await p.click('[data-act=saveProduct]');
+    await open(p, 'syrup'); await p.selectOption('#f-pk_brand', 'Top Creamery'); await p.selectOption('#f-pk_product', { label: 'Caramel' }); assert.strictEqual(await val(p, 'size'), ''); assert.deepStrictEqual((await opts(p, 'pk_size')).slice(1, 3), ['750 ml', '250 ml']); await p.selectOption('#f-pk_size', '250'); await p.click('[data-act=saveProduct]');
+    const s = await state(p); assert.deepStrictEqual(s.products.map((x) => [x.brand, x.name, x.size, x.unit, x.category]), [['Top Creamery', 'Hazelnut', 750, 'ml', 'syrup'], ['Top Creamery', 'Caramel', 250, 'ml', 'syrup']]); await ctx.close();
+  });
+  await test('Yamamasa Koyamaen is listed with matcha, and Marukyu Koyamaen products are not mixed into it', async () => {
+    const { ctx, p } = await fresh(); await open(p); assert.ok((await opts(p, 'pk_brand')).includes('Yamamasa Koyamaen')); await p.selectOption('#f-pk_brand', 'Yamamasa Koyamaen'); assert.deepStrictEqual((await opts(p, 'pk_product')).slice(1, 7), ['Matsukaze', 'Ogurayama', 'Samidori', 'Yomo no Kaori', 'Tennouzan', 'Wakakusa']);
+    await p.selectOption('#f-pk_product', { label: 'Matsukaze' }); assert.deepStrictEqual((await opts(p, 'pk_size')).slice(1, 3), ['30 g', '100 g']); assert.ok(!/typical/.test(await p.locator('.pickbox').innerText()), 'Matsukaze sizes were seen in a listing'); await ctx.close();
   });
   console.log('capsules and machines');
   await test('with an Original machine only Original flavours are offered; Livanto fills system, intensity and sleeve size', async () => {

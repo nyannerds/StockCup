@@ -51,15 +51,23 @@ const CATALOG = (function (SC) {
   add('Nespresso', 'capsule', 'Vertuo · Barista Creations', [['Bianco Forte', { shots: 1 }], ['Bianco Doppio', { shots: 1 }], ['Bianco Piccolo', { shots: 1 }]], vert);
 
   // ---------- Matcha and hojicha ----------
-  const typical = { sizes: [20, 30, 40, 100], sizesTypical: true };
-  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu', 'Koyamaen', 'Marukyu Koyamaen Matcha']);
+  const typical = { sizes: [20, 30, 40, 100], sizesTypical: true, distinct: true }; // distinct: the product name alone identifies it (Wako, Ummon...)
+  brand('Marukyu Koyamaen', ['matcha', 'hojicha'], ['Marukyu-Koyamaen', 'Marukyu', 'Marukyu Koyamaen Matcha']);
   add('Marukyu Koyamaen', 'matcha', 'Matcha', ['Isuzu', 'Aoarashi', 'Yugen', 'Wako', 'Kinrin', 'Chigi no Shiro'], typical);
   add('Marukyu Koyamaen', 'hojicha', 'Hojicha powder', ['Hojicha Powder A', 'Hojicha Powder B'], { sizes: [40, 100, 200], sizesTypical: true });
   brand('Ippodo', ['matcha', 'tea'], ['Ippodo Tea', 'Ippodo Tea Co', 'Ippodo Tea Co.']);
-  add('Ippodo', 'matcha', 'Matcha', [['Ummon-no-mukashi', { sizes: [20, 40], sizesConfirmed: true }], ['Sayaka-no-mukashi', { sizes: [20, 40, 100], sizesConfirmed: true }]]);
+  add('Ippodo', 'matcha', 'Matcha', [['Ummon-no-mukashi', { sizes: [20, 40], sizesConfirmed: true }], ['Sayaka-no-mukashi', { sizes: [20, 40, 100], sizesConfirmed: true }]], { distinct: true });
   add('Ippodo', 'tea', 'Roasted green tea (leaves)', [['Gokujo Hojicha', { sizes: [80, 100], sizesTypical: true }]]);
+  brand('Yamamasa Koyamaen', ['matcha'], ['Yamamasa', 'Yamamasa-Koyamaen', 'Yamamasa Koyamaen Matcha']);
+  add('Yamamasa Koyamaen', 'matcha', 'Matcha', [['Matsukaze', { sizes: [30, 100], sizesTypical: false, sizesConfirmed: true }], ['Ogurayama', { sizes: [40, 100], sizesTypical: false, sizesConfirmed: true }], 'Samidori', 'Yomo no Kaori', 'Tennouzan', 'Wakakusa'], typical);
   brand('Aiya', ['matcha'], ['AIYA', 'Aiya America']);
   add('Aiya', 'matcha', 'Matcha', [['Organic Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Premium First Harvest Ceremonial Grade', { sizes: [30, 100], sizesConfirmed: true }], ['Organic Culinary Grade', { sizes: [100], sizesConfirmed: true }]]);
+
+  // ---------- Syrups ----------
+  brand('Top Creamery', ['syrup'], ['TOP Series', 'TOP Series Classique', 'Top Creamery TOP Series', 'TOP Creamery']);
+  add('Top Creamery', 'syrup', 'TOP Series', [['Caramel', { sizes: [750, 250] }], ['Creamy Vanilla', { sizes: [750, 250] }], 'Mango', 'Green Mango'], { sizes: [750], sizesConfirmed: true });
+  add('Top Creamery', 'syrup', 'TOP Series Classique', ['French Vanilla', 'Hazelnut', 'Chocolate', 'Salted Caramel', 'Macadamia Nut', 'Philippine Mango', 'Green Apple', 'Watermelon', 'Lychee', 'Passion Fruit', 'Strawberry', 'Blueberry', 'Yuzu'], { sizes: [750], sizesConfirmed: true });
+  add('Top Creamery', 'syrup', 'TOP Series Sugar Syrups', ['Sugar Syrup', 'Cane Sugar Syrup', 'Brown Sugar Syrup'], { sizes: [750], sizesConfirmed: true });
 
   // ---------- Coffee beans ----------
   brand('Lavazza', ['coffee'], []);
