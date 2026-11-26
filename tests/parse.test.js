@@ -133,4 +133,33 @@ check('parsing speed is far below the 15 s per screenshot budget (text stage)', 
   const t0 = Date.now(); for (let i = 0; i < 200; i++) SCP.parseRecipeText(texts[i % texts.length].t); assert.ok(Date.now() - t0 < 2000);
 });
 
+
+// ---- Phase 3: tea and photo labels ----
+check('tea: quick-add, receipt lines and recipe lines understand tea', () => {
+  const q = [['Twinings Earl Grey tea 100g x2', { category: 'tea', size: 100, packs: 2, brand: 'Twinings' }], ['Lipton green tea 25 bags', { category: 'tea', size: 50 }], ['Chai tea 250g', { category: 'tea', size: 250 }], ['Jasmine tea 40g', { category: 'tea', size: 40 }]];
+  q.forEach(([line, exp]) => { const r = SCP.parseProductLine(line, state); Object.keys(exp).forEach((k) => assert.ok(k === 'brand' ? r.brand.toLowerCase() === exp.brand.toLowerCase() : r[k] === exp[k], line + ' ' + k + ' got ' + r[k])); });
+  const rc = SCP.parseReceipt('TEA SHOP\nEARL GREY TEA 100G 3.20\nBREAD 55.00\nTOTAL 58.20', state); assert.strictEqual(rc.rows.length, 1); assert.strictEqual(rc.rows[0].category, 'tea');
+  assert.strictEqual(SCP.parseIngredientLine('1 tsp green tea').type, 'tea'); assert.strictEqual(SCP.parseIngredientLine('1 teaspoon sugar').type, 'syrup'); assert.strictEqual(SCP.parseProductLine('matcha tea powder 30g', state).category, 'matcha');
+});
+const labels = [
+  ['OATLY\nBARISTA EDITION\nOat drink\n1 L e\nPer 100 ml: Energy 250 kJ Fat 3.0 g Protein 1.0 g', { category: 'milk', size: 1000, unit: 'ml', brand: 'Oatly' }],
+  ['Ippodo Tea\nSayaka no Mukashi\nMatcha\nNet wt 100 g\n3.5 oz', { category: 'matcha', size: 100, unit: 'g' }],
+  ['Nespresso Livanto\n10 capsules', { category: 'capsule', size: 10 }],
+  ['Whole Milk\n1 Litre\nProtein 3.4g Fat 3.6g', { category: 'milk', size: 1000, unit: 'ml' }],
+  ['TWININGS\nEnglish Breakfast\n50 Tea Bags 125g', { category: 'tea', size: 125, unit: 'g', brand: 'Twinings' }],
+  ['Monin Vanilla Syrup 700 ml', { category: 'syrup', size: 700, unit: 'ml', brand: 'Monin' }],
+  ['Lipton Green Tea 25 tea bags', { category: 'tea', size: 50, unit: 'g' }],
+  ['Torani Caramel Syrup\n750 mL 25.4 FL OZ\nPer 30 ml: 100 kcal', { category: 'syrup', size: 750, unit: 'ml', brand: 'Torani' }],
+  ['Blue Bottle\nCoffee beans\nNet Wt 340 g (12 oz)\nIngredients: 100% arabica', { category: 'coffee', size: 340, unit: 'g' }],
+  ['Alpro Soya Drink\nUnsweetened\n1L\nper 100ml: energy 33 kcal', { category: 'milk', size: 1000, unit: 'ml', brand: 'Alpro' }],
+];
+check('photo labels: at least 80% read as the right category and pack size, with nutrition numbers ignored', () => {
+  let ok = 0; const bad = [];
+  labels.forEach(([text, exp]) => { const r = SCP.parsePhotoLabel(text, state); let good = !!r; if (r) Object.keys(exp).forEach((k) => { if (k === 'brand' ? String(r.brand).toLowerCase() !== exp.brand.toLowerCase() : r[k] !== exp[k]) good = false; }); if (good) ok++; else bad.push(text.split('\n')[0] + ' -> ' + JSON.stringify(r && [r.category, r.brand, r.size, r.unit])); });
+  console.log('       photo labels ' + ok + '/' + labels.length + (bad.length ? '\n       ' + bad.join('\n       ') : '')); assert.ok(ok / labels.length >= 0.8);
+});
+check('an unreadable label gives a row without a category (the app then asks) or nothing', () => {
+  assert.strictEqual(SCP.parsePhotoLabel('', state), null); const r = SCP.parsePhotoLabel('hello world', state); assert.ok(!r || !r.category);
+});
+
 console.log(failed ? '\n' + failed + ' failed' : '\nall parser checks passed'); process.exit(failed ? 1 : 0);

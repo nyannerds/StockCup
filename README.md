@@ -71,6 +71,15 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 | `tests/supabase-api.test.js` | The app's Supabase calls match the SQL function and column names |
 | `tests/pwa.test.js` | Manifest and icons, service worker, installability, offline reload, offline OCR after first use |
 
+## Adding items by photo
+
+Pantry → **＋ Add** → **Photo of an item**. Take or choose a photo of the label; the words are read on the device (the photo is previewed
+only while you confirm, then discarded, and is never stored, exported or synced). The pack size ("1 L" → 1000 ml, tea bags → about 2 g each),
+category and brand are filled in, you pick **how full it is** (Full / ¾ / ½ / ¼ / Almost empty / Not sure), and it is added as one sealed pack or
+one opened pack. A carton or tin cannot show its level in a photo, so the fullness is always your choice; "Not sure" saves an unknown amount.
+If the label cannot be read, type what it says. Photo reading needs the app served over http(s) (see above); typing works anywhere.
+Receipt scans have an **only coffee, matcha, tea and capsules** switch on the review screen.
+
 ## Design notes
 
 * Navigation: four tabs (Home, Pantry, Recipes, Profile). Home has the search bar, the notification bell (descale, aging, low stock, recount alerts), Log a drink / Same as last time, Daily Insights tiles (tap for the log and history) and a filterable "Ready now" list. Profile holds people, machines, shopping list, guest plan, limits, appearance and data.

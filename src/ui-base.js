@@ -160,7 +160,7 @@ function render(keepSheet) {
 
 // ---------- sheets ----------
 function openSheet(name, data) { SHEET = { name: name, data: data || {} }; clearTimeout(toastTimer); $('#toast-root').innerHTML = ''; renderSheet(); const b = $('#overlay .body'); if (b) b.scrollTop = 0; }
-function closeSheet() { SHEET = null; lastSheet = null; $('#overlay').innerHTML = ''; }
+function closeSheet() { SHEET = null; lastSheet = null; $('#overlay').innerHTML = ''; if (typeof releasePhoto === 'function') releasePhoto(); }
 let lastSheet = null;
 function renderSheet() {
   const ov = $('#overlay');

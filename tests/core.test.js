@@ -543,4 +543,22 @@ test('500 products, 100 recipes, 1000 logs: calculations under 1 s', () => {
   assert.ok(ms < 1000, 'took ' + ms);
 });
 
+
+console.log('Phase 3: fullness levels and tea');
+test('three-quarters fullness converts to 75% and recount accepts it', () => {
+  assert.strictEqual(SC.FILL.threequarter, 0.75);
+  const s = fresh(); const p = add(s, { size: 40, sealed: 0, openMode: 'threequarter' }); near(SC.stockOf(p).amount, 30);
+  const v = SC.validateRecount(p, { sealed: 0, openMode: 'threequarter' }, TODAY); assert.ok(v.ok); near(v.value.open.amount, 30);
+  assert.deepStrictEqual(Object.keys(SC.FILL).sort(), ['almost', 'full', 'half', 'quarter', 'threequarter'].sort());
+});
+test('tea is a category and recipe slot with an estimated caffeine default, and works end to end', () => {
+  assert.ok(SC.CATEGORIES.tea && SC.SLOT_TYPES.includes('tea') && SC.BASE_UNIT.tea === 'g');
+  const s = fresh(); add(s, { category: 'tea', brand: 'Twinings', name: 'Earl Grey', size: 100, sealed: 1 }); add(s, { category: 'milk', name: 'M', size: 1000, sealed: 1 });
+  const r = SCP.draftToRecipe({ name: 'Milk tea', serve: 'hot', servings: 1, ingredients: [{ type: 'tea', amount: 2, unit: 'g' }, { type: 'milk', amount: 100, unit: 'ml', dairyPossible: true }], steps: ['Steep'] }); assert.ok(r.ok); s.recipes.push(r.recipe);
+  assert.ok(SC.suggest(s, {}, TODAY).ready.find((a) => a.recipe.name === 'Milk tea'));
+  const d = SC.emptyDraft(s, r.recipe, 1, 'p_me', TODAY + 'T09:00'); const res = SC.commitLog(s, d); assert.ok(res.ok, JSON.stringify(res.errors)); near(res.log.caffeine, 30); // 2 g x 15 mg/g, an estimate
+  near(SC.stockOf(s.products[0]).amount, 98); assert.ok(SC.importData(SC.exportData(s)));
+  assert.ok(SC.PRESETS.filter((p) => p.category === 'tea').length >= 2); SC.PRESETS.filter((p) => p.category === 'tea').forEach((p) => assert.ok(SC.validateProductInput(SC.presetToForm(p), { withStock: true }).ok));
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed'); process.exit(failed ? 1 : 0);

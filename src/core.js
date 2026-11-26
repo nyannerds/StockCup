@@ -6,8 +6,8 @@ const SC = (function () {
   const EPS = 1e-6;
   const SHOT_CAFFEINE = 63; // mg per espresso shot, commonly cited average
   const GRAMS_PER_SHOT = 9;
-  const FILL = { full: 1, half: 0.5, quarter: 0.25, almost: 0.1 };
-  const FILL_LABEL = { full: 'Full', half: 'Half', quarter: 'Quarter', almost: 'Almost empty' };
+  const FILL = { full: 1, threequarter: 0.75, half: 0.5, quarter: 0.25, almost: 0.1 };
+  const FILL_LABEL = { full: 'Full', threequarter: 'Three quarters', half: 'Half', quarter: 'Quarter', almost: 'Almost empty' };
   const VOL_ML = { ml: 1, tsp: 5, tbsp: 15, cup: 240 };
 
   // ---------- small helpers ----------
@@ -67,6 +67,7 @@ const SC = (function () {
   // ---------- categories & recipe slot types ----------
   const CATEGORIES = {
     matcha: { label: 'Matcha powder', unit: 'g', size: 30, density: 0.4, shelf: 40, caf: 30, thr: 20, dairy: false },
+    tea: { label: 'Tea (leaves or bags)', unit: 'g', size: 100, density: 0.3, shelf: 180, caf: 15, thr: 50, dairy: false },
     hojicha: { label: 'Hojicha powder', unit: 'g', size: 50, density: 0.4, shelf: 60, caf: 7, thr: 20, dairy: false },
     coffee: { label: 'Coffee beans / grounds', unit: 'g', size: 250, density: 0.5, shelf: 30, caf: 7, thr: 100, dairy: false },
     capsule: { label: 'Nespresso capsules', unit: 'capsule', size: 10, density: 1, shelf: null, caf: SHOT_CAFFEINE, thr: 10, dairy: false },
@@ -76,9 +77,9 @@ const SC = (function () {
     icecream: { label: 'Ice cream', unit: 'g', size: 450, density: 0.55, shelf: 60, caf: 0, thr: null, dairy: true },
     other: { label: 'Other', unit: 'g', size: 100, density: 1, shelf: 30, caf: 0, thr: null, dairy: false },
   };
-  const SLOT_TYPES = ['matcha', 'hojicha', 'espresso', 'coffee', 'milk', 'syrup', 'tonic', 'icecream', 'other'];
-  const SLOT_LABEL = { matcha: 'matcha powder', hojicha: 'hojicha powder', espresso: 'espresso', coffee: 'coffee beans / grounds', milk: 'milk', syrup: 'syrup', tonic: 'tonic water', icecream: 'ice cream', other: 'other' };
-  const BASE_UNIT = { matcha: 'g', hojicha: 'g', coffee: 'g', espresso: 'shot', milk: 'ml', syrup: 'ml', tonic: 'ml', icecream: 'g', other: 'g' };
+  const SLOT_TYPES = ['matcha', 'hojicha', 'tea', 'espresso', 'coffee', 'milk', 'syrup', 'tonic', 'icecream', 'other'];
+  const SLOT_LABEL = { matcha: 'matcha powder', hojicha: 'hojicha powder', tea: 'tea', espresso: 'espresso', coffee: 'coffee beans / grounds', milk: 'milk', syrup: 'syrup', tonic: 'tonic water', icecream: 'ice cream', other: 'other' };
+  const BASE_UNIT = { matcha: 'g', hojicha: 'g', tea: 'g', coffee: 'g', espresso: 'shot', milk: 'ml', syrup: 'ml', tonic: 'ml', icecream: 'g', other: 'g' };
   const RECIPE_UNITS = ['g', 'ml', 'tsp', 'tbsp', 'cup', 'shot'];
 
   // ---------- built-in recipes ----------
@@ -134,6 +135,9 @@ const SC = (function () {
     P('pre_matcha_cer', 'Generic', 'Ceremonial matcha', 'matcha', 30, { shelf: 40 }),
     P('pre_matcha_cul', 'Generic', 'Culinary matcha', 'matcha', 100, { shelf: 60 }),
     P('pre_hojicha', 'Generic', 'Hojicha powder', 'hojicha', 50, { shelf: 60 }),
+    P('pre_tea_black', 'Generic', 'Black tea', 'tea', 100),
+    P('pre_tea_green', 'Generic', 'Green tea', 'tea', 100, { caffeine: 12 }),
+    P('pre_tea_chai', 'Generic', 'Chai tea', 'tea', 100),
     P('pre_milk_whole', 'Generic', 'Whole milk', 'milk', 1000, { dairy: true }),
     P('pre_milk_lf', 'Generic', 'Lactose-free milk', 'milk', 1000, { dairy: true }),
     P('pre_milk_oat', 'Generic', 'Oat milk (barista)', 'milk', 1000, { dairy: false }),

@@ -6,7 +6,7 @@ const errList = (arr) => arr && arr.length ? '<div class="errbox" role="alert">'
 
 // ---------- add menu & presets ----------
 ACT.addMenu = () => openSheet('addMenu');
-SHEETS.addMenu = () => ({ title: 'Add products', body: '<div class="stack" style="margin-top:10px"><button class="big" data-act="addPreset">📋 Pick from the starter list</button><button class="big" data-act="openQuickAdd">⌨️ Type a line (quick add)</button><button class="big" data-act="openReceipt">🧾 Scan a receipt photo</button><button class="big" data-act="newProduct">✏️ Enter all the details</button></div><p class="small muted">The starter list is a small, editable set of common products. It is not an authoritative catalogue.</p>' });
+SHEETS.addMenu = () => ({ title: 'Add products', body: '<div class="stack" style="margin-top:10px"><button class="big" data-act="addPreset">📋 Pick from the starter list</button><button class="big" data-act="openQuickAdd">⌨️ Type a line (quick add)</button><button class="big" data-act="openPhoto">📷 Photo of an item</button><button class="big" data-act="openReceipt">🧾 Scan a receipt photo</button><button class="big" data-act="newProduct">✏️ Enter all the details</button></div><p class="small muted">The starter list is a small, editable set of common products. It is not an authoritative catalogue.</p>' });
 ACT.newProduct = () => openProductForm({});
 ACT.addPreset = () => openSheet('presets', { q: '' });
 function presetListHtml(q) {
@@ -59,7 +59,7 @@ SHEETS.product = (d) => {
     if (isCap) b += '<div class="grid2"><div>' + field('sleeves', 'Sleeves', f.sleeves, { type: 'number', int: true, err: e.sleeves }) + '</div><div>' + field('loose', 'Loose capsules', f.loose, { type: 'number', int: true, err: e.loose }) + '</div></div><div class="small muted">3 sleeves of 10 and 4 loose = 34 capsules.</div>';
     else {
       b += field('sealed', 'Sealed packs (bought N packs)', f.sealed, { type: 'number', int: true, err: e.sealed }) +
-        selectField('openMode', 'Plus one opened pack', [['none', 'No opened pack'], ['full', 'Opened, full'], ['half', 'Opened, half'], ['quarter', 'Opened, a quarter'], ['almost', 'Opened, almost empty'], ['unknown', 'Opened, amount unknown']], f.openMode, { change: 'pfMode', err: e.openMode });
+        selectField('openMode', 'Plus one opened pack', [['none', 'No opened pack'], ['full', 'Opened, full'], ['threequarter', 'Opened, three quarters'], ['half', 'Opened, half'], ['quarter', 'Opened, a quarter'], ['almost', 'Opened, almost empty'], ['unknown', 'Opened, amount unknown']], f.openMode, { change: 'pfMode', err: e.openMode });
       if (f.openMode !== 'none') b += field('openDate', 'Date opened', f.openDate, { type: 'date', err: e.openDate, max: today() });
     }
   }
@@ -115,7 +115,7 @@ SHEETS.recount = (d) => {
   if (p.category === 'capsule') b += field('count', 'Capsules in total', f.count, { type: 'number', int: true, err: v.errors.count, change: 'rcField' });
   else {
     b += field('sealed', 'Sealed packs (' + fmt(p.size) + ' ' + p.unit + ' each)', f.sealed, { type: 'number', int: true, err: v.errors.sealed, change: 'rcField' }) +
-      selectField('openMode', 'Opened pack', [['none', 'No opened pack'], ['amount', 'I know the exact amount'], ['full', 'Full'], ['half', 'About half'], ['quarter', 'About a quarter'], ['almost', 'Almost empty'], ['unknown', 'Not sure']], f.openMode, { change: 'rcField' });
+      selectField('openMode', 'Opened pack', [['none', 'No opened pack'], ['amount', 'I know the exact amount'], ['full', 'Full'], ['threequarter', 'About three quarters'], ['half', 'About half'], ['quarter', 'About a quarter'], ['almost', 'Almost empty'], ['unknown', 'Not sure']], f.openMode, { change: 'rcField' });
     if (f.openMode === 'amount') b += field('openAmount', 'Amount left in the opened pack (' + p.unit + ')', f.openAmount, { type: 'number', err: v.errors.openAmount, change: 'rcField' });
   }
   b += '</form>';
@@ -166,7 +166,7 @@ function rowHtml(r, i) {
 }
 SHEETS.confirmRows = (d) => {
   const n = d.rows.filter((r) => r.include).length;
-  return { title: 'Check before saving', body: '<p class="muted">Nothing is saved until you press Save. Fix anything that was misread.</p>' + errList(d.errors) + '<form id="cform" novalidate>' + d.rows.map(rowHtml).join('') + '</form>' +
+  return { title: 'Check before saving', body: '<p class="muted">Nothing is saved until you press Save. Fix anything that was misread.</p>' + (d.from === 'receipt' ? checkField('onlyCore', 'Only coffee, matcha, tea and capsules (leave out milk, syrup, tonic, ice cream)', d.onlyCore, { change: 'rowOnly' }) : '') + errList(d.errors) + '<form id="cform" novalidate>' + d.rows.map(rowHtml).join('') + '</form>' +
     (d.other && d.other.length ? '<details><summary>' + d.other.length + ' other line' + (d.other.length > 1 ? 's' : '') + ' ignored</summary>' + d.other.map((l) => '<div class="small muted">' + esc(l) + '</div>').join('') + '</details>' : ''),
     footer: '<button data-act="confirmRowsBack">Back</button><button class="primary" data-act="confirmRowsSave"' + (n ? '' : ' disabled') + '>Save ' + n + ' item' + (n === 1 ? '' : 's') + '</button>' };
 };
@@ -362,4 +362,62 @@ SHEETS.filters = () => {
     '<h2>Caffeine</h2><div class="chips" style="flex-wrap:wrap">' + chip('caf', 'none', 'No caffeine') + chip('caf', 'low', 'Low') + chip('caf', 'medium', 'Medium') + chip('caf', 'high', 'High') + '</div>' +
     '<h2>Other</h2><div class="chips" style="flex-wrap:wrap">' + chip('dairyFree', '1', '🌱 Dairy-free') + chip('fav', '1', '★ Favorites') + '</div><p class="small muted">Dairy-free is worked out from the products you chose and each product’s “contains dairy” setting. It is not allergy advice.</p>',
     footer: '<button data-act="rfClear">Clear all</button><button class="primary" data-act="closeSheet">Show recipes</button>' };
+};
+
+CHG.rowOnly = (el) => {
+  syncRows(); const d = SHEET.data; d.onlyCore = el.checked; const core = ['matcha', 'hojicha', 'tea', 'coffee', 'capsule'];
+  d.rows.forEach((r) => { if (core.indexOf(r.category) < 0) r.include = !d.onlyCore; }); renderSheet();
+};
+
+// ---------- add an item from a photo of its label ----------
+const PHOTO = { url: '' };
+function releasePhoto() { if (PHOTO.url) { try { URL.revokeObjectURL(PHOTO.url); } catch (e) { /* ignore */ } PHOTO.url = ''; } }
+ACT.openPhoto = () => { releasePhoto(); openSheet('photoAdd', { text: '', status: '', busy: false, err: '' }); };
+SHEETS.photoAdd = (d) => ({ title: 'Add an item by photo', body: '<p class="muted">Take or choose a photo of the label. The words are read on this device and the photo is thrown away when you finish. You choose how full it is next. No reader on this device? Just type what the label says.</p>' +
+  '<label class="f" for="phFile">Photo of the label</label><input type="file" id="phFile" accept="image/*" capture="environment" style="min-height:44px"><button class="primary big" style="margin-top:8px" data-act="readPhoto"' + (d.busy ? ' disabled' : '') + '>Read the label</button><div id="ocrStatus" class="small muted" role="status" style="margin:6px 0">' + esc(d.status) + '</div>' +
+  (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + '<label class="f" for="phText">What the label says (edit if needed)</label><textarea id="phText" rows="5" placeholder="Oatly Barista oat drink 1 L">' + esc(d.text) + '</textarea>', footer: footBtns('closeSheet', 1, 'Find product', 'phParse') });
+ACT.readPhoto = async () => {
+  const file = $('#phFile') && $('#phFile').files[0]; if (!file) { $('#ocrStatus').textContent = 'Choose or take a photo first.'; return; }
+  const d = SHEET.data; d.text = $('#phText').value; d.busy = true; releasePhoto(); try { PHOTO.url = URL.createObjectURL(file); } catch (e) { PHOTO.url = ''; }
+  const st = (m) => { const n = $('#ocrStatus'); if (n) n.textContent = m; }; st('Starting…');
+  try { d.text = await OCR.read(file, st); d.status = d.text.trim() ? 'Done. Check the text, then press “Find product”.' : 'Nothing readable was found. Type what the label says.'; } catch (e) { d.status = e.message; }
+  d.busy = false; if (SHEET && SHEET.name === 'photoAdd') renderSheet();
+};
+const FILL_CHIPS = [['full', 'Full (unopened)'], ['threequarter', '¾'], ['half', '½'], ['quarter', '¼'], ['almost', 'Almost empty'], ['unsure', 'Not sure']];
+ACT.phParse = () => {
+  const d = SHEET.data; d.text = $('#phText').value; const row = SCP.parsePhotoLabel(d.text, S);
+  if (!row) { d.err = 'Type or read the label text first.'; renderSheet(); return; }
+  const cat = row.category || 'other'; const C = SC.CATEGORIES[cat];
+  openSheet('photoConfirm', { row: row, category: cat, brand: row.brand || '', name: row.name || '', size: row.size || C.size, unit: row.unit || C.unit, price: row.price === null || row.price === undefined ? '' : row.price, fill: 'full', extra: 0, sleeves: cat === 'capsule' ? (row.sleeves === null || row.sleeves === undefined ? 1 : row.sleeves) : 0, loose: row.loose || 0, errors: {}, matchId: row.matchedProductId || null, known: !!row.category, sizeFound: row.sizeFound });
+};
+SHEETS.photoConfirm = (d) => {
+  const e = d.errors || {}; const cap = d.category === 'capsule'; const existing = d.matchId ? S.products.find((p) => p.id === d.matchId) : null;
+  let b = (PHOTO.url ? '<img src="' + esc(PHOTO.url) + '" alt="Your photo (not saved)" style="width:100%;max-height:180px;object-fit:contain;border-radius:14px;background:var(--surface2);margin-top:8px">' : '') +
+    (existing ? '<div class="warnbox">You already have <b>' + esc(SC.productLabel(existing)) + '</b>. To correct its amount, recount it instead.<div style="margin-top:6px"><button class="small" data-act="phRecount" data-id="' + existing.id + '">Recount it</button></div></div>' : '') +
+    (!d.known ? '<div class="warnbox">I could not tell what this is. Pick a category below.</div>' : '') + (d.sizeFound === false ? '<div class="warnbox">No pack size found on the label, so a typical size was filled in. Check it.</div>' : '') +
+    '<form id="phform" novalidate>' + selectField('category', 'Category', Object.keys(SC.CATEGORIES).filter((c) => c !== 'capsule' || SC.capsulesEnabled(S) || d.category === 'capsule').map((c) => [c, catLabel(c)]), d.category, { change: 'phField' }) +
+    '<div class="grid2"><div>' + field('brand', 'Brand', d.brand, { err: e.brand }) + '</div><div>' + field('name', 'Name', d.name, { err: e.name }) + '</div></div>' +
+    '<div class="grid2"><div>' + field('size', cap ? 'Capsules per sleeve' : 'Pack size (' + d.unit + ')', d.size, { type: 'number', err: e.size }) + '</div><div>' + field('price', 'Price per pack (optional)', d.price, { type: 'number', err: e.price }) + '</div></div></form>';
+  if (cap) b += '<h2>How many?</h2><div class="grid2"><div>' + field('sleeves', 'Sleeves', d.sleeves, { type: 'number', int: true, err: e.sleeves, change: 'phField' }) + '</div><div>' + field('loose', 'Loose capsules', d.loose, { type: 'number', int: true, err: e.loose, change: 'phField' }) + '</div></div>';
+  else b += '<h2>How full is it?</h2><div class="chips" style="flex-wrap:wrap" role="group" aria-label="How full">' + FILL_CHIPS.map((c) => '<button class="chip" aria-pressed="' + (d.fill === c[0]) + '" data-act="phFill" data-v="' + c[0] + '">' + c[1] + '</button>').join('') + '</div><div class="small muted">' + (d.fill === 'full' ? 'Counts as one sealed pack.' : d.fill === 'unsure' ? 'Saved as “unknown amount”. You can recount it later.' : 'Saved as one opened pack, about ' + Math.round((SC.FILL[d.fill] || 0) * 100) + '% full (' + fmt((SC.FILL[d.fill] || 0) * (Number(d.size) || 0)) + ' ' + d.unit + ').') + '</div>' + field('extra', 'More sealed packs of this', d.extra, { type: 'number', int: true, err: e.sealed, change: 'phField' });
+  return { title: 'Check this item', body: b, footer: '<button data-act="phBack">Back</button><button class="primary" data-act="phSave">Add to pantry</button>' };
+};
+function syncPhoto() { const f = $('#phform'); if (!f) return; const v = formData(f); const d = SHEET.data; ['brand', 'name', 'size', 'price'].forEach((k) => { if (v[k] !== undefined) d[k] = v[k]; }); ['extra', 'sleeves', 'loose'].forEach((k) => { const el = $('#f-' + k); if (el) d[k] = el.value; }); if (v.category) d.category = v.category; }
+CHG.phField = (el) => {
+  syncPhoto(); const d = SHEET.data;
+  if (el.name === 'category') { const C = SC.CATEGORIES[d.category]; d.unit = C.unit; if (!d.sizeFound || true) d.size = d.row && d.row.category === d.category ? d.row.size : C.size; d.known = true; if (d.category === 'capsule' && !Number(d.sleeves)) d.sleeves = 1; }
+  renderSheet();
+};
+ACT.phFill = (el) => { syncPhoto(); SHEET.data.fill = el.dataset.v; renderSheet(); };
+ACT.phBack = () => { const d = SHEET.data; openSheet('photoAdd', { text: (d.row && d.row.raw) || '', status: '', busy: false, err: '' }); };
+ACT.phRecount = (el) => { releasePhoto(); closeSheet(); openRecount(el.dataset.id); };
+ACT.phSave = () => {
+  syncPhoto(); const d = SHEET.data; const cap = d.category === 'capsule';
+  const row = Object.assign({}, d.row, { category: d.category, brand: d.brand, name: d.name, size: d.size, unit: d.unit, price: d.price === '' ? null : d.price, presetId: d.row && d.row.category === d.category ? d.row.presetId : null, sleeves: Number(d.sleeves) || 0, loose: Number(d.loose) || 0, packs: 1 });
+  const f = SCP.rowToForm(row); f.brand = d.brand; f.name = d.name; f.size = d.size; f.price = d.price; f.category = d.category;
+  if (cap) { f.sleeves = d.sleeves; f.loose = d.loose; } else { f.sealed = (d.fill === 'full' ? 1 : 0) + (Number(d.extra) || 0); f.openMode = d.fill === 'full' ? 'none' : d.fill === 'unsure' ? 'unknown' : d.fill; f.openDate = today(); f.unit = d.unit; }
+  const v = SC.validateProductInput(f, { withStock: true, today: today() }); if (v.ok && cap && !v.value.count) { v.ok = false; v.errors.sleeves = 'Enter how many capsules you have'; }
+  if (!v.ok) { d.errors = v.errors; renderSheet(); return; }
+  const p = SC.buildProduct(v.value); if (!S.products.some((x) => x.category === p.category && x.usual)) p.usual = true; S.products.push(p);
+  releasePhoto(); save(); closeSheet(); render(); toast('Added ' + SC.productLabel(p) + '.');
 };

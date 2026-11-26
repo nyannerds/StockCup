@@ -26,6 +26,7 @@ const SCP = (function (SC) {
     ['capsule', /\b(capsules?|caps|pods?|nespresso|vertuo|sleeves?|livanto|arpeggio|ristretto|volluto|kazaar|dharkan|capriccio|cosi|melozio|stormio|diavolo|altissio|roma)\b/],
     ['hojicha', /\b(hojicha|houjicha)\b/],
     ['matcha', /\bmatcha\b/],
+    ['tea', /\b(tea|tea bags?|chai|earl grey|oolong|sencha|rooibos|jasmine|genmaicha|darjeeling|assam|ceylon|pekoe)\b/],
     ['icecream', /\b(ice[- ]?cream|gelato)\b/],
     ['tonic', /\btonic\b/],
     ['syrup', /\b(syrup|sauce|sweetener)\b/],
@@ -35,6 +36,8 @@ const SCP = (function (SC) {
   const STOP = new Set(['the', 'of', 'and', 'a', 'an', 'pack', 'pcs', 'pc', 'caps', 'capsules', 'capsule', 'pods', 'pod', 'sleeve', 'sleeves', 'powder', 'drink']);
   const SKIP_LINE = /\b(sub-?total|total|cash|change|vat|tax|tin|invoice|receipt|thank|discount|card|visa|master|balance|tendered|cashier|store|branch|address|tel|date|time|amount due|items?|qty|ref|terminal|pos)\b/i;
 
+  // single words that start a product's own name (so "Twinings Earl Grey" splits into brand and name)
+  const DERIVE_KW = { tea: /^(tea|chai|earl|english|green|black|oolong|sencha|rooibos|jasmine|genmaicha|darjeeling|assam|ceylon|pekoe|herbal)$/i };
   function categoryOf(text) {
     const l = text.toLowerCase();
     for (let i = 0; i < CAT_KW.length; i++) if (CAT_KW[i][1].test(l)) return CAT_KW[i][0];
@@ -83,6 +86,7 @@ const SCP = (function (SC) {
     if (m) { size = Number(m[1].replace(',', '.')); unit = m[2].toLowerCase(); s = s.replace(m[0], ' '); }
     m = s.match(/(\d+)\s*(?:caps|capsules?|pods?|pcs|s)\b/i);
     if (m && /\b(caps|capsules?|pods?)\b|nespresso|vertuo/i.test(orig)) { packSize = Number(m[1]); s = s.replace(m[0], ' '); }
+    let bags = null; m = s.match(/(\d+)\s*(?:tea\s*)?(?:bags?|sachets?)\b/i); if (m) { bags = Number(m[1]); s = s.replace(m[0], ' '); }
     // leading count on receipts: "2 OATLY ..."
     if (qty === null) { m = s.match(/^\s*(\d{1,2})\s+(?=[a-z])/i); if (m) { qty = Number(m[1]); s = s.replace(m[0], ' '); } }
     s = s.replace(/\s+/g, ' ').replace(/^[\s\-:.,|]+|[\s\-:.,|]+$/g, '');
@@ -116,12 +120,13 @@ const SCP = (function (SC) {
       const C = CATS[row.category];
       if (row.category === 'capsule') {
         row.unit = 'capsule'; if (packSize) { row.size = packSize; if (row.matchedProductId) { const mp = state.products.find((x) => x.id === row.matchedProductId); if (mp && mp.size !== packSize) row.matchedProductId = null; } }
-        else if (!row.size) row.size = C.size;
+        else if (!row.size) { row.size = C.size; row.sizeGuessed = true; }
         row.sleeves = sleeves !== null ? sleeves : (loose !== null ? 0 : (qty || 1)); row.packs = row.sleeves;
       } else if (size !== null) {
         const b = toBase(size, unit, row.category);
         if (b) { if (row.matchedProductId) { const mp = state.products.find((x) => x.id === row.matchedProductId); if (mp && (Math.abs(mp.size - b.v) > 0.5 || mp.unit !== b.u)) row.matchedProductId = null; } row.size = b.v; row.unit = b.u; }
       }
+      if (row.category === 'tea' && bags && size === null) { row.size = bags * 2; row.unit = 'g'; row.sizeGuessed = true; row.bagCount = bags; } // about 2 g per tea bag
       if (!row.size) { row.size = C.size; row.unit = C.unit; row.sizeGuessed = true; }
       if (!row.unit) row.unit = C.unit;
     }
@@ -130,7 +135,8 @@ const SCP = (function (SC) {
       const words = s.split(' ').filter(Boolean); let kwIdx = -1;
       if (row.category) {
         const kw = CAT_KW.find((k) => k[0] === row.category)[1];
-        kwIdx = words.findIndex((w) => kw.test(w.toLowerCase()));
+        const extra = DERIVE_KW[row.category];
+        kwIdx = words.findIndex((w) => kw.test(w.toLowerCase()) || (extra && extra.test(w)));
       }
       if (kwIdx > 0) { row.brand = titleCase(words.slice(0, Math.min(kwIdx, 3)).join(' ')); row.name = titleCase(words.slice(Math.min(kwIdx, 3)).join(' ')); }
       else if (kwIdx === 0 || kwIdx === -1) { row.brand = ''; row.name = titleCase(words.join(' ')); }
@@ -139,8 +145,33 @@ const SCP = (function (SC) {
       row.confidence = row.category ? 0.5 : 0;
       if (row.category) row.dairy = CATS[row.category].dairy;
     }
-    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, ''));
+    // a line only counts as a receipt item if it has a price, a pack size, or is a known product (so a shop called "TEA SHOP" is not an item)
+    row.relevant = !!row.category && !SKIP_LINE.test(orig.replace(/\b(items?)\b/gi, '')) && (row.price !== null || !row.sizeGuessed || !!row.presetId || !!row.matchedProductId);
     if (!orig) return null;
+    return row;
+  }
+  // One product from the text printed on its packaging (OCR or typed). Returns a row like parseProductLine, or null.
+  const NUTRITION = /\b(?:fat|saturates?|saturated|carbohydrates?|carbs|sugars?|protein|salt|sodium|fib(?:re|er)|energy|calories|calcium|vitamin)\b[^0-9\n]{0,15}\d+(?:[.,]\d+)?\s*(?:g|mg|kj|kcal|ml|%)?/gi;
+  function parsePhotoLabel(text, state) {
+    const t = normalize(text); if (!t) return null;
+    const flat = t.split(/\n+/).map((x) => x.trim()).filter(Boolean).join(' ');
+    const cleaned = flat.replace(/\bper\s*\d+(?:[.,]\d+)?\s*(?:g|ml|gr)\b/gi, ' ').replace(NUTRITION, ' ');
+    const re = /(\d+(?:[.,]\d+)?)\s*(kg|kilograms?|grams?|gr|g|liters?|litres?|ltr|lt|l|ml|cl)\b/gi; const found = []; let m;
+    while ((m = re.exec(cleaned))) {
+      const v = Number(m[1].replace(',', '.')); const u = m[2].toLowerCase(); let base, unit;
+      if (/^(kg|kilogram)/.test(u)) { base = v * 1000; unit = 'g'; } else if (/^(g|gr|gram)/.test(u)) { base = v; unit = 'g'; } else if (u === 'ml') { base = v; unit = 'ml'; } else if (u === 'cl') { base = v * 10; unit = 'ml'; } else { base = v * 1000; unit = 'ml'; }
+      if (base < 1 || base > 20000) continue;
+      const before = cleaned.slice(Math.max(0, m.index - 14), m.index).toLowerCase();
+      found.push({ base: base, unit: unit, net: /(net|content|contents|vol|volume|wt|weight|nett)\W*$/.test(before), at: m.index, len: m[0].length });
+    }
+    const pick = found.filter((f) => f.net)[0] || found.slice().sort((a, b) => b.base - a.base)[0];
+    let head = cleaned; found.slice().sort((a, b) => b.at - a.at).forEach((f) => { head = head.slice(0, f.at) + ' ' + head.slice(f.at + f.len); });
+    head = head.split(/\b(?:net|per|ingredients?|nutrition(?:al)?|best before|serving|store|keep|contains)\b/i)[0];
+    head = head.split(/\s+/).filter((w) => w && !/^[\d.,%:]+$/.test(w) && !/^(fl|oz|kcal|kj|e|wt|wt\.)$/i.test(w)).slice(0, 9).join(' ');
+    let extra = ''; const cap = flat.match(/\d+\s*(?:capsules?|caps|pods?)\b/i); if (cap) extra += ' ' + cap[0]; const bg = flat.match(/\d+\s*(?:tea\s*)?(?:bags?|sachets?)\b/i); if (bg && !pick) extra += ' ' + bg[0];
+    const row = parseProductLine(head + (pick ? ' ' + pick.base + pick.unit : '') + extra, state); if (!row) return null;
+    if (!row.category) { const wc = categoryOf(flat); if (wc) { const C = CATS[wc]; row.category = wc; row.size = row.size || C.size; row.unit = row.unit || C.unit; row.dairy = C.dairy; if (!row.name) row.name = C.label; } }
+    row.sizeFound = !!pick || !!cap || !!(bg && row.category === 'tea');
     return row;
   }
   function parseQuickAdd(text, state) {
@@ -175,6 +206,7 @@ const SCP = (function (SC) {
     ['icecream', /ice[- ]?cream|gelato/],
     ['hojicha', /hojicha|houjicha/],
     ['matcha', /matcha/],
+    ['tea', /\btea\b|chai|earl grey|oolong|sencha|rooibos|jasmine|genmaicha|darjeeling|assam|ceylon/],
     ['espresso', /espresso|nespresso|ristretto|\bshots?\b|lungo|capsules?|\bpods?\b/],
     ['coffee', /cold brew|coffee|beans|grounds|instant/],
     ['tonic', /tonic|soda water|sparkling water/],
@@ -338,6 +370,6 @@ const SCP = (function (SC) {
       steps: (d.steps || []).map((s) => String(s).trim()).filter(Boolean), note: String(d.note || '').slice(0, 300), sourceLink: d.sourceLink ? String(d.sourceLink).slice(0, 300) : '' } };
   }
 
-  return { normalize, categoryOf, tokensOf, parseProductLine, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
+  return { normalize, categoryOf, tokensOf, parseProductLine, parsePhotoLabel, parseQuickAdd, parseReceipt, rowToForm, parseIngredientLine, parseRecipeText, draftToRecipe, typeOf };
 })(typeof module !== 'undefined' ? require('./core.js') : SC);
 if (typeof module !== 'undefined') module.exports = SCP;
