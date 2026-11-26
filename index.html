@@ -145,12 +145,19 @@ details { margin: 8px 0; } summary { min-height: 44px; display: flex; align-item
 #app { padding-top: 0; }
 .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
 
+.syncpill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--on-brand-soft); color: var(--on-brand); margin-left: 4px; vertical-align: middle; }
+.card .syncpill { background: var(--ok-soft); color: var(--ok); } .card .syncpill.offline, .card .syncpill.syncing, .card .syncpill.connecting { background: var(--warn-soft); color: var(--warn); } .card .syncpill.error { background: var(--bad-soft); color: var(--bad); }
+.codebox { font: 700 1.6rem/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .08em; text-align: center; background: var(--surface2); border-radius: var(--radius-s); padding: 16px 8px; user-select: all; }
+
+.hero-sub { margin-top: 6px; } .hero-sub .syncpill { margin-left: 0; }
+
 </style>
 </head>
 <body>
 <div id="app"><noscript>StockCup needs JavaScript to run.</noscript></div>
 <div id="overlay"></div>
 <div id="toast-root"></div>
+<script src="config.js"></script>
 <script>
 /* StockCup core logic: pure functions, no DOM. Tested in Node (tests/), bundled into index.html by build.js. */
 const SC = (function () {
@@ -800,7 +807,7 @@ const SC = (function () {
       const lu = state.settings.lastUsed = state.settings.lastUsed || {};
       lu[(draft.recipeId || '') + ':' + pt.slotType] = p.id; lu[pt.slotType] = p.id;
     });
-    const log = { id: uid(), ts: draft.ts, personId: draft.personId, recipeId: draft.recipeId, name: draft.name, servings: draft.servings, parts: parts,
+    const log = { id: draft.id || uid(), ts: draft.ts, personId: draft.personId, recipeId: draft.recipeId, name: draft.name, servings: draft.servings, parts: parts,
       caffeine: ev.caffeine, cost: ev.cost, costUnknown: ev.costUnknown, dairyFree: ev.dairyFree, rating: draft.rating || null, note: draft.note || '',
       slotsMeta: draft.slots.map((s) => ({ i: s.i, enabled: s.enabled !== false })), free: !draft.recipeId };
     if (draft.sample) log.sample = true;
@@ -862,17 +869,17 @@ const SC = (function () {
     }
     return { ok: Object.keys(errors).length === 0, errors: errors, value: v };
   }
-  function applyRecount(state, productId, v, ts) {
+  function applyRecount(state, productId, v, ts, id) {
     const p = state.products.find((x) => x.id === productId); if (!p) return null;
     const before = snapshot(p); const prev = recountPreview(p, v);
     if (p.category === 'capsule') p.count = v.count; else { p.sealed = v.sealed; p.open = v.open; }
-    const adj = { id: uid(), ts: ts || localDateTime(), kind: 'recount', productId: p.id, productLabel: productLabel(p), unit: p.unit, before: before, after: snapshot(p), diff: prev.diff, oldTotal: prev.oldTotal, newTotal: prev.newTotal, newUnknown: prev.newUnknown };
+    const adj = { id: id || uid(), ts: ts || localDateTime(), kind: 'recount', productId: p.id, productLabel: productLabel(p), unit: p.unit, before: before, after: snapshot(p), diff: prev.diff, oldTotal: prev.oldTotal, newTotal: prev.newTotal, newUnknown: prev.newUnknown };
     state.adjustments.push(adj); state.settings.recountMark = state.logs.length; return adj;
   }
-  function restock(state, productId, packs, ts) {
+  function restock(state, productId, packs, ts, id) {
     const p = state.products.find((x) => x.id === productId); if (!p) return null;
     packs = packs || 1; const before = snapshot(p); addPacks(p, packs);
-    const adj = { id: uid(), ts: ts || localDateTime(), kind: 'restock', productId: p.id, productLabel: productLabel(p), unit: p.unit, packs: packs, before: before, after: snapshot(p), diff: p.category === 'capsule' ? packs * p.size : packs * p.size, chunks: [{ k: 'pack', n: packs }] };
+    const adj = { id: id || uid(), ts: ts || localDateTime(), kind: 'restock', productId: p.id, productLabel: productLabel(p), unit: p.unit, packs: packs, before: before, after: snapshot(p), diff: p.category === 'capsule' ? packs * p.size : packs * p.size, chunks: [{ k: 'pack', n: packs }] };
     state.adjustments.push(adj); return adj;
   }
   function undoAdjustment(state, adjId) {
@@ -1384,6 +1391,263 @@ const SCP = (function (SC) {
 })(typeof module !== 'undefined' ? require('./core.js') : SC);
 if (typeof module !== 'undefined') module.exports = SCP;
 
+/* StockCup household sync engine (no DOM, no network code; the transport is injected).
+
+   Idea: every change a person makes becomes an OPERATION with a unique id. All devices apply the same
+   operations in the same order (the server's sequence number), so shared stock converges instead of one
+   phone overwriting another. Drinks, restocks and recounts replay through the existing functions in core.js.
+
+   Two copies of the pantry are kept on each device:
+     serverState = every server-confirmed operation applied in server order (identical on all devices)
+     state (S)   = serverState + this device's not-yet-confirmed operations replayed on top (what you see)
+*/
+const SYNC = (function (SC) {
+  'use strict';
+  const OP_VERSION = 1;
+  const LOCAL_SETTINGS = ['theme', 'tempUnit', 'imperial', 'onboarded', 'activePerson', 'recountMark', 'lastUsed', 'sampleLoaded'];
+  const SHARED_SETTINGS = ['currency'];
+  const STOCK_KEYS = ['sealed', 'count', 'open'];
+  const COLLS = ['people', 'machines', 'recipes', 'shopping', 'products'];
+
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  function uuid() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    const r = () => Math.floor(Math.random() * 16).toString(16);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => (c === 'x' ? r() : (8 + Math.floor(Math.random() * 4)).toString(16)));
+  }
+  function canon(o) {
+    if (Array.isArray(o)) return '[' + o.map(canon).join(',') + ']';
+    if (o && typeof o === 'object') return '{' + Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + canon(o[k])).join(',') + '}';
+    return JSON.stringify(o === undefined ? null : o);
+  }
+  const omit = (o, keys) => { const r = {}; Object.keys(o).forEach((k) => { if (keys.indexOf(k) < 0) r[k] = o[k]; }); return r; };
+  const isInt = (v, min, max) => typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= min && v <= max;
+  const isNum = (v, min) => typeof v === 'number' && isFinite(v) && v >= min;
+  const str = (v, max) => typeof v === 'string' && v.length <= max;
+  const OK = { ok: true };
+  const fail = (reason) => ({ ok: false, reason: reason });
+
+  function makeOp(type, payload, deviceId) { return { id: uuid(), v: OP_VERSION, type: type, payload: payload, deviceId: deviceId }; }
+  const rowOf = (op) => ({ op_id: op.id, device_id: op.deviceId, type: op.type, v: op.v, payload: op.payload });
+  const opOf = (row) => ({ id: row.op_id, deviceId: row.device_id, type: row.type, v: row.v, payload: row.payload });
+
+  // ---------- applying one operation to a state ----------
+  function validItem(coll, it, full) {
+    if (!it || typeof it !== 'object' || !str(it.id, 80) || !it.id) return false;
+    if (coll === 'products') return !!SC.CATEGORIES[it.category] && str(it.brand, 80) && str(it.name, 100) && isNum(it.size, 1e-9) && ['g', 'ml', 'capsule'].indexOf(it.unit) >= 0 && (!full || isNum(it.sealed, 0)) && isNum(it.density, 1e-9)
+      && (it.category !== 'capsule' || (it.capsule && (it.capsule.system === 'original' || it.capsule.system === 'vertuo')));
+    if (coll === 'people') return str(it.name, 60) && it.name.length > 0;
+    if (coll === 'machines') return str(it.name, 60) && (it.system === 'original' || it.system === 'vertuo') && isNum(it.descaleCaps, 1) && isNum(it.descaleMonths, 1);
+    if (coll === 'recipes') return str(it.name, 100) && (it.serve === 'hot' || it.serve === 'iced') && Array.isArray(it.ingredients) && it.ingredients.length > 0 && Array.isArray(it.steps) && it.ingredients.every((i) => SC.SLOT_TYPES.indexOf(i.type) >= 0 && isNum(i.amount, 1e-9) && SC.RECIPE_UNITS.indexOf(i.unit) >= 0);
+    if (coll === 'shopping') return str(it.label, 200);
+    return false;
+  }
+  function replaceKeep(ex, item, keepKeys) {
+    const keep = {}; keepKeys.forEach((k) => { if (ex[k] !== undefined) keep[k] = ex[k]; });
+    Object.keys(ex).forEach((k) => { delete ex[k]; }); Object.assign(ex, clone(item), keep);
+  }
+  function mergeLocalSettings(next, current) {
+    const local = {}; LOCAL_SETTINGS.forEach((k) => { if (current && current.settings && current.settings[k] !== undefined) local[k] = clone(current.settings[k]); });
+    next.settings = Object.assign({}, next.settings, local);
+    if (!next.people.some((p) => p.id === next.settings.activePerson)) next.settings.activePerson = next.people[0].id;
+    return next;
+  }
+
+  function apply(state, op) {
+    try {
+      if (!op || typeof op.type !== 'string') return fail('malformed operation');
+      if (op.v && op.v > OP_VERSION) return fail('newer operation version');
+      const p = op.payload || {};
+      switch (op.type) {
+        case 'snapshot': {
+          const s = SC.sanitizeState(clone(p.state));
+          const cur = clone(state);
+          Object.keys(state).forEach((k) => { delete state[k]; }); Object.assign(state, s); mergeLocalSettings(state, cur);
+          return OK;
+        }
+        case 'put': {
+          if (COLLS.indexOf(p.coll) < 0 || !p.item) return fail('invalid ' + p.coll + ' item');
+          const arr = state[p.coll]; const i = arr.findIndex((x) => x.id === p.item.id);
+          const whole = !!p.full || i < 0; // an edit (no stock fields) of something that no longer exists cannot be applied
+          if (!validItem(p.coll, p.item, whole && (p.coll === 'products'))) return fail('invalid ' + p.coll + ' item');
+          if (i < 0 && !p.full && (p.coll === 'products' || p.coll === 'machines')) return fail(p.coll.slice(0, -1) + ' no longer exists');
+          if (i < 0) arr.push(clone(p.item));
+          else if (p.full) arr[i] = clone(p.item);
+          else if (p.coll === 'products') replaceKeep(arr[i], p.item, STOCK_KEYS);
+          else if (p.coll === 'machines') replaceKeep(arr[i], p.item, ['caps', 'lastDescaled']);
+          else arr[i] = clone(p.item);
+          return OK;
+        }
+        case 'del': {
+          if (COLLS.indexOf(p.coll) < 0 || !str(p.id, 80)) return fail('invalid delete');
+          if (p.coll === 'people') { if (state.people.some((x) => x.id === p.id)) { if (!SC.deletePerson(state, p.id)) return fail('cannot delete the last person'); } return OK; }
+          state[p.coll] = state[p.coll].filter((x) => x.id !== p.id); return OK;
+        }
+        case 'thr': {
+          if (!SC.CATEGORIES[p.cat] || !(p.value === null || isNum(p.value, 0))) return fail('invalid limit'); state.thresholds[p.cat] = p.value; return OK;
+        }
+        case 'set': {
+          if (SHARED_SETTINGS.indexOf(p.key) < 0 || !str(p.value, 3)) return fail('invalid setting'); state.settings[p.key] = p.value; return OK;
+        }
+        case 'log.edit': {
+          const l = state.logs.find((x) => x.id === p.id); if (!l) return fail('drink no longer exists');
+          if (!(p.rating === null || isInt(p.rating, 1, 5)) || !str(p.note || '', 200)) return fail('invalid edit');
+          if (!(p.personId === null || state.people.some((x) => x.id === p.personId))) return fail('person no longer exists');
+          l.rating = p.rating; l.note = p.note || ''; l.personId = p.personId; return OK;
+        }
+        case 'log.commit': {
+          const d = p.draft; if (!d || typeof d !== 'object' || !str(d.id, 80) || !Array.isArray(d.slots)) return fail('invalid drink');
+          if (state.logs.some((x) => x.id === d.id)) return OK; // already applied
+          const draft = clone(d); draft.allowShort = true; delete draft.sample;
+          if (draft.personId && !state.people.some((x) => x.id === draft.personId)) draft.personId = null;
+          const r = SC.commitLog(state, draft); return r.ok ? OK : fail(String((r.errors || [])[0] || 'drink could not be applied').slice(0, 140));
+        }
+        case 'log.undo': { SC.undoLog(state, p.id); return OK; }
+        case 'adj.recount': {
+          if (state.adjustments.some((x) => x.id === p.id)) return OK;
+          const prod = state.products.find((x) => x.id === p.productId); if (!prod) return fail('product no longer exists');
+          const v = p.v; if (!v || typeof v !== 'object') return fail('invalid recount');
+          if (prod.category === 'capsule') { if (!isInt(v.count, 0, 1e6)) return fail('invalid recount'); }
+          else { if (!isInt(v.sealed, 0, 1e5) || !(v.open === null || (v.open && (v.open.amount === null || isNum(v.open.amount, 0)) && SC.validDate(v.open.openedAt)))) return fail('invalid recount'); }
+          SC.applyRecount(state, p.productId, v, p.ts, p.id); return OK;
+        }
+        case 'adj.restock': {
+          if (state.adjustments.some((x) => x.id === p.id)) return OK;
+          if (!state.products.some((x) => x.id === p.productId)) return fail('product no longer exists'); if (!isInt(p.packs, 1, 1000)) return fail('invalid restock');
+          SC.restock(state, p.productId, p.packs, p.ts, p.id); return OK;
+        }
+        case 'adj.undo': { SC.undoAdjustment(state, p.id); return OK; }
+        case 'stock.add': {
+          const prod = state.products.find((x) => x.id === p.productId); if (!prod) return fail('product no longer exists');
+          if (p.packs !== undefined) { if (!isInt(p.packs, 1, 1000)) return fail('invalid stock'); SC.addPacks(prod, p.packs); return OK; }
+          if (prod.category !== 'capsule' || !isInt(p.count, 1, 1e5)) return fail('invalid stock'); prod.count += p.count; return OK;
+        }
+        case 'product.open': {
+          const prod = state.products.find((x) => x.id === p.productId); if (!prod) return fail('product no longer exists');
+          SC.openAPack(prod, SC.validDate(p.date) ? String(p.date).slice(0, 10) : SC.localDate()); return OK;
+        }
+        case 'machine.reset': {
+          const m = state.machines.find((x) => x.id === p.id); if (!m) return fail('machine no longer exists');
+          if (!isInt(p.caps, 0, 1e7) || !SC.validDate(p.lastDescaled)) return fail('invalid machine update'); m.caps = p.caps; m.lastDescaled = String(p.lastDescaled).slice(0, 10); return OK;
+        }
+        default: return fail('unknown operation type');
+      }
+    } catch (e) { return fail('error: ' + (e && e.message)); }
+  }
+
+  // ---------- turning local edits into operations ----------
+  // Compares the state at the last save with the current one. Stock numbers are NOT diffed (they change only via
+  // explicit operations: drinks, restocks, recounts), so editing a product name can never overwrite someone's stock.
+  function diff(prev, cur) {
+    const ops = []; const real = (a) => (a || []).filter((x) => !x.sample);
+    COLLS.forEach((coll) => {
+      const a = new Map(real(prev[coll]).map((x) => [x.id, x])); const b = new Map(real(cur[coll]).map((x) => [x.id, x]));
+      b.forEach((item, id) => {
+        const old = a.get(id);
+        if (!old) ops.push({ type: 'put', payload: { coll: coll, item: clone(item), full: true } });
+        else if (coll === 'products') { if (canon(omit(old, STOCK_KEYS)) !== canon(omit(item, STOCK_KEYS))) ops.push({ type: 'put', payload: { coll: coll, item: clone(omit(item, STOCK_KEYS)) } }); }
+        else if (coll === 'machines') { if (canon(omit(old, ['caps', 'lastDescaled'])) !== canon(omit(item, ['caps', 'lastDescaled']))) ops.push({ type: 'put', payload: { coll: coll, item: clone(omit(item, ['caps', 'lastDescaled'])) } }); }
+        else if (canon(old) !== canon(item)) ops.push({ type: 'put', payload: { coll: coll, item: clone(item) } });
+      });
+      a.forEach((item, id) => { if (!b.has(id)) ops.push({ type: 'del', payload: { coll: coll, id: id } }); });
+    });
+    Object.keys(Object.assign({}, prev.thresholds, cur.thresholds)).forEach((k) => {
+      const x = prev.thresholds[k] === undefined ? null : prev.thresholds[k], y = cur.thresholds[k] === undefined ? null : cur.thresholds[k];
+      if (x !== y) ops.push({ type: 'thr', payload: { cat: k, value: y } });
+    });
+    SHARED_SETTINGS.forEach((k) => { if ((prev.settings || {})[k] !== (cur.settings || {})[k] && (cur.settings || {})[k] !== undefined) ops.push({ type: 'set', payload: { key: k, value: cur.settings[k] } }); });
+    const before = new Map((prev.logs || []).map((l) => [l.id, l]));
+    (cur.logs || []).forEach((l) => {
+      const o = before.get(l.id); if (!o || l.sample) return;
+      let person = l.personId || null; const oldPerson = o.personId || null;
+      if (person === null && oldPerson !== null && !(cur.people || []).some((x) => x.id === oldPerson)) person = oldPerson; // a deleted person is handled by the delete operation
+      if ((o.rating || null) !== (l.rating || null) || (o.note || '') !== (l.note || '') || oldPerson !== person)
+        ops.push({ type: 'log.edit', payload: { id: l.id, rating: l.rating || null, note: l.note || '', personId: l.personId || null } });
+    });
+    return ops;
+  }
+
+  // ---------- the client: outbox, pulling, rebuilding ----------
+  // opts: { transport, store:{get,set}, getState(), setState(s), deviceId, onChange() }
+  function createClient(opts) {
+    const c = { household: null, lastSeq: 0, serverState: null, pending: [], prev: null, queue: [], skipped: [], status: 'off', error: '', busy: false, again: false, sub: null };
+    const T = opts.transport;
+    const setStatus = (s, err) => { c.status = s; c.error = err || ''; if (opts.onChange) opts.onChange(c); };
+    const persist = () => opts.store.set('sync', { household: c.household, lastSeq: c.lastSeq, serverState: c.serverState, pending: c.pending, skipped: c.skipped.slice(-50) }).catch(() => {});
+    c.pendingCount = () => c.pending.length;
+
+    c.load = async function () {
+      const d = await opts.store.get('sync'); if (!d || !d.household) return false;
+      c.household = d.household; c.lastSeq = d.lastSeq || 0; c.serverState = d.serverState || SC.defaultState(); c.pending = d.pending || []; c.skipped = d.skipped || [];
+      c.prev = clone(opts.getState()); return true;
+    };
+    // Begin syncing a household. fresh=true starts from an empty server copy (join); the local pantry is then replaced.
+    c.attach = async function (household, fresh, snapshotOfLocal) {
+      c.household = household; c.lastSeq = 0; c.serverState = SC.defaultState(); c.pending = []; c.queue = []; c.skipped = [];
+      if (snapshotOfLocal) c.pending.push(makeOp('snapshot', { state: clone(opts.getState()) }, opts.deviceId));
+      c.prev = clone(opts.getState()); await persist(); void fresh;
+    };
+    c.detach = async function () {
+      if (c.sub) { try { c.sub(); } catch (e) { /* ignore */ } c.sub = null; }
+      c.household = null; c.pending = []; c.queue = []; c.serverState = null; c.lastSeq = 0; c.prev = null; await opts.store.set('sync', null); setStatus('off');
+    };
+    c.emit = function (type, payload) { if (c.household) c.queue.push({ type: type, payload: payload }); };
+    c.localChanged = function (S) {
+      if (!c.household) return;
+      const ops = diff(c.prev || S, S).concat(c.queue); c.queue = [];
+      if (!ops.length) { c.prev = clone(S); return; }
+      ops.forEach((o) => c.pending.push(makeOp(o.type, o.payload, opts.deviceId)));
+      c.prev = clone(S); persist(); setStatus('syncing'); Promise.resolve().then(() => c.sync());
+    };
+    c.snapshotAll = function (S) { if (!c.household) return; c.queue = []; c.pending.push(makeOp('snapshot', { state: clone(S) }, opts.deviceId)); c.prev = clone(S); persist(); Promise.resolve().then(() => c.sync()); };
+
+    c.flush = async function () {
+      if (!c.household || !c.pending.length) return;
+      await T.push(c.household.id, c.pending.map(rowOf)); // idempotent: the server ignores operation ids it already has
+    };
+    c.pull = async function () {
+      if (!c.household) return;
+      let newSkips = 0, foreign = false, applied = 0;
+      for (;;) {
+        const rows = await T.pull(c.household.id, c.lastSeq, 500); if (!rows.length) break;
+        const mine = new Set(c.pending.map((o) => o.id));
+        rows.forEach((row) => {
+          const op = opOf(row); const res = apply(c.serverState, op); applied++;
+          if (!res.ok) { newSkips++; c.skipped.push({ type: op.type, reason: res.reason }); }
+          if (!mine.has(op.id)) foreign = true; c.lastSeq = Math.max(c.lastSeq, row.server_seq);
+        });
+        const seen = new Set(rows.map((row) => row.op_id)); c.pending = c.pending.filter((o) => !seen.has(o.id));
+        if (rows.length < 500) break;
+      }
+      if (applied) { persist(); if (foreign || newSkips) c.rebuild(); }
+    };
+    c.rebuild = function () {
+      const next = clone(c.serverState); c.pending.forEach((op) => { apply(next, op); });
+      mergeLocalSettings(next, opts.getState()); c.prev = clone(next); opts.setState(next);
+    };
+    // One full round: send what is pending, then fetch everything new. Safe to call at any time.
+    c.sync = async function () {
+      if (!c.household) return; if (c.busy) { c.again = true; return; }
+      c.busy = true;
+      try {
+        do { c.again = false; setStatus(c.pending.length ? 'syncing' : c.status === 'off' ? 'connecting' : 'syncing'); await c.flush(); await c.pull(); } while (c.again);
+        setStatus(c.pending.length ? 'syncing' : 'synced');
+      } catch (e) {
+        const offline = (typeof navigator !== 'undefined' && navigator.onLine === false) || /fetch|network|Failed to|offline/i.test(String(e && e.message));
+        setStatus(offline ? 'offline' : 'error', String((e && e.message) || e));
+      } finally { c.busy = false; }
+    };
+    c.start = async function () {
+      if (!c.household) return; await c.sync();
+      if (T.subscribe && !c.sub) c.sub = T.subscribe(c.household.id, () => { c.sync(); });
+    };
+    return c;
+  }
+
+  return { OP_VERSION, LOCAL_SETTINGS, uuid, canon, clone, makeOp, rowOf, opOf, apply, diff, createClient, mergeLocalSettings };
+})(typeof module !== 'undefined' ? require('./core.js') : SC);
+if (typeof module !== 'undefined') module.exports = SYNC;
+
 /* On-device text reading for receipt photos and recipe screenshots.
    1) the browser's own TextDetector when present, 2) bundled Tesseract (vendor/ocr/), which runs fully offline.
    Images are drawn to a temporary canvas and discarded; nothing is stored. */
@@ -1448,7 +1712,7 @@ let S = null;               // application state (see SC.defaultState)
 let storageNote = '';       // shown when the browser blocks or rejects saving
 const UI = { page: 'home', pantryCat: 'all', pantryQ: '', rview: 'make', rf: { serve: '', caf: '', dairyFree: false, fav: false, q: '' }, hwho: 'all', hmonth: today().slice(0, 7), lastLogId: null };
 const ACT = {}, CHG = {}, SUB = {}, INP = {}, VIEWS = {}, SHEETS = {};
-let SHEET = null; let pendingConfirm = null; let toastTimer = null;
+let SHEET = null; let pendingConfirm = null; let toastTimer = null; let SYNC_CLIENT = null;
 
 // ---------- storage ----------
 function loadState() {
@@ -1461,11 +1725,12 @@ function loadState() {
     return SC.defaultState();
   }
 }
-function save() {
+function saveRaw() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); if (storageNote.indexOf('full') >= 0) storageNote = ''; return true; } catch (e) {
-    storageNote = 'Could not save: browser storage is full or blocked. Export your data now from More.'; return false;
+    storageNote = 'Could not save: browser storage is full or blocked. Export your data now from Profile.'; return false;
   }
 }
+function save() { const ok = saveRaw(); syncAfterSave(); return ok; }
 function mutate(fn) { fn(S); save(); render(); }
 function applyTheme() {
   const t = S.settings.theme; const r = document.documentElement;
@@ -1551,9 +1816,9 @@ function hero(title, extra, home) {
   if (home) {
     const n = alertCount();
     return '<header class="hero"><div class="hero-top"><div class="logo">' + ICON.logo + '<span>StockCup</span></div><button class="searchbar" data-act="openSearch" aria-label="Search pantry and recipes"><span>Search here …</span>' + ICON.search + '</button></div>' +
-      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span></div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
+      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span> ' + syncPill() + '</div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
   }
-  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div></header>' + notes;
+  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div>' + (connected() ? '<div class="hero-sub">' + syncPill() + '</div>' : '') + '</header>' + notes;
 }
 
 // In-place DOM reconciliation: keeps the same elements (and focus) so a tap is never lost to a re-render.
@@ -1583,15 +1848,15 @@ function paint(container, html, fresh) {
   const t = document.createElement('div'); t.innerHTML = html; patchChildren(container, t);
 }
 let rendering = false, lastPage = null;
-function render() {
+function render(keepSheet) {
   if (!S) return;
-  if (rendering) { setTimeout(render, 0); return; }
+  if (rendering) { setTimeout(() => render(keepSheet), 0); return; }
   rendering = true;
   try {
     const view = VIEWS[UI.page] || VIEWS.home; const y = window.scrollY; const fresh = lastPage !== UI.page; lastPage = UI.page;
     paint($('#app'), view() + navHtml(), fresh);
     if (fresh) window.scrollTo(0, y);
-    renderSheet();
+    if (!keepSheet) renderSheet(); // a remote update must not reset a form that is being filled in
   } finally { rendering = false; }
 }
 
@@ -1761,9 +2026,9 @@ ACT.seeAging = () => { UI.pantryCat = 'aging'; go('pantry'); };
 ACT.toShopping = () => go('shopping');
 ACT.seeMake = () => { UI.rview = 'make'; go('recipes'); };
 ACT.dismissRecount = () => mutate((s) => { s.settings.recountMark = s.logs.length; });
-ACT.descaled = (el) => mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } });
+ACT.descaled = (el) => { emitOp('machine.reset', { id: el.dataset.id, caps: 0, lastDescaled: today() }); mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } }); };
 ACT.addMissing = (el, e) => { e.stopPropagation(); openProductForm({ category: el.dataset.cat }); };
-ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
+ACT.loadSample = () => { if (connected()) { toast('The sample pantry cannot be used while connected to a household.'); return; } mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
 
 // ---------- PANTRY ----------
 function pantryItems() {
@@ -1873,8 +2138,8 @@ VIEWS.history = () => {
 };
 ACT.hwho = (el) => { UI.hwho = el.dataset.v; render(); };
 ACT.hmonth = (el) => { const [y, m] = UI.hmonth.split('-').map(Number); const d = new Date(y, m - 1 + Number(el.dataset.d), 1); UI.hmonth = d.getFullYear() + '-' + SC.pad(d.getMonth() + 1); render(); };
-ACT.undoLogAsk = (el) => confirmDialog('Undo this drink? The stock it used will be put back.', 'Undo drink', () => { const ok = SC.undoLog(S, el.dataset.id); save(); render(); toast(ok ? 'Drink removed and stock restored.' : 'Could not find that drink.'); }, true);
-ACT.undoAdj = (el) => { SC.undoAdjustment(S, el.dataset.id); save(); render(); toast('Adjustment undone.'); };
+ACT.undoLogAsk = (el) => confirmDialog('Undo this drink? The stock it used will be put back.', 'Undo drink', () => { const ok = opUndoLog(el.dataset.id); save(); render(); toast(ok ? 'Drink removed and stock restored.' : 'Could not find that drink.'); }, true);
+ACT.undoAdj = (el) => { opUndoAdj(el.dataset.id); save(); render(); toast('Adjustment undone.'); };
 
 // ---------- SHOPPING ----------
 VIEWS.shopping = () => {
@@ -1894,8 +2159,8 @@ VIEWS.shopping = () => {
   h += '<form data-submit="addShop" class="card"><label class="f" for="f-shoplabel">Add something to buy</label><div class="row"><input id="f-shoplabel" name="label" maxlength="60" placeholder="e.g. paper filters" autocomplete="off"><button class="primary">Add</button></div></form>';
   return h;
 };
-ACT.bought = (el) => { const adj = SC.restock(S, el.dataset.id, 1); save(); render(); toast('Restocked the usual pack.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
-ACT.boughtExtra = (el) => { const adj = SC.restock(S, el.dataset.pid, 1); S.shopping = S.shopping.filter((x) => x.id !== el.dataset.id); save(); render(); toast('Restocked and removed from the list.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
+ACT.bought = (el) => { const adj = opRestock(el.dataset.id, 1); save(); render(); toast('Restocked the usual pack.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
+ACT.boughtExtra = (el) => { const adj = opRestock(el.dataset.pid, 1); S.shopping = S.shopping.filter((x) => x.id !== el.dataset.id); save(); render(); toast('Restocked and removed from the list.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
 ACT.dropExtra = (el) => mutate((s) => { s.shopping = s.shopping.filter((x) => x.id !== el.dataset.id); });
 SUB.addShop = (f) => { const v = formData(f).label.trim(); if (!v) { toast('Type what to buy first.'); return; } if (v.length > 60) { toast('That is too long.'); return; } mutate((s) => { s.shopping.push({ id: SC.uid(), label: v, note: '' }); }); };
 
@@ -1936,6 +2201,7 @@ VIEWS.more = () => {
   let h = hero('Profile');
   h += '<div class="profilecard">' + avatarBtn().replace('data-act="nextPerson"', 'data-act="nextPerson"') + '<div class="grow"><b style="font:700 1.25rem var(--display)">' + esc(activePerson().name) + '</b><div class="small" style="opacity:.92">Active person · tap the circle to switch</div></div></div>';
   h += '<div class="linkrows"><button data-act="go" data-page="history"><span>📊 Log & insights</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="shopping"><span>🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="plan"><span>🎉 Guest plan</span><span aria-hidden="true">›</span></button></div>';
+  h += syncCardHtml();
   h += '<h2>People</h2><div class="card"><p class="small muted">Names only, no logins. Stock is shared; each drink is tagged with who had it.</p>' + S.people.map((p) =>
     '<div class="row"><div class="grow">' + (p.id === S.settings.activePerson ? '<b>' + esc(p.name) + '</b> <span class="badge acc">active</span>' : esc(p.name)) + '</div>' + (p.id === S.settings.activePerson ? '' : '<button class="small" data-act="setPerson" data-id="' + p.id + '">Use</button>') + '<button class="small" data-act="renamePerson" data-id="' + p.id + '">Rename</button><button class="small danger" data-act="delPerson" data-id="' + p.id + '" aria-label="Delete ' + esc(p.name) + '">✕</button></div>').join('') +
     '<form data-submit="addPerson" class="row" style="margin-top:8px"><input name="name" maxlength="40" placeholder="Add a person" aria-label="New person name" autocomplete="off"><button class="primary">Add</button></form></div>';
@@ -1988,14 +2254,14 @@ CHG.importFile = (el) => {
   r.onload = () => {
     try {
       const data = SC.importData(String(r.result));
-      confirmDialog('Replace everything on this device with the file’s data? (' + data.products.length + ' products, ' + data.logs.length + ' logged drinks.) This cannot be undone.', 'Replace', () => { S = data; save(); applyTheme(); render(); toast('Import complete.'); }, true);
+      confirmDialog((connected() ? 'You are connected to a household: this replaces the SHARED pantry for everyone. ' : '') + 'Replace everything on this device with the file’s data? (' + data.products.length + ' products, ' + data.logs.length + ' logged drinks.) This cannot be undone.', 'Replace', () => { replaceAllState(data); applyTheme(); render(); toast(connected() ? 'Import complete. The shared pantry was replaced for everyone.' : 'Import complete.'); }, true);
     } catch (e) { toast('Import failed: ' + e.message, null, null, 6000); }
   };
   r.onerror = () => toast('Could not read that file.'); r.readAsText(file); el.value = '';
 };
 ACT.restoreBuiltins = () => mutate((s) => { SC.builtinRecipes().forEach((b) => { if (!s.recipes.some((r) => r.id === b.id)) s.recipes.push(b); }); toast('Built-in recipes restored.'); });
 ACT.clearSample = () => confirmDialog('Remove the sample products, sample drinks and sample people? Your own data stays.', 'Clear sample', () => { mutate((s) => { SC.clearSample(s); }); toast('Sample cleared.'); }, true);
-ACT.wipeAll = () => confirmDialog('Erase ALL products, recipes you made, drinks and settings on this device? Export first if you might want them back.', 'Erase everything', () => { S = SC.defaultState(); save(); applyTheme(); UI.pantryCat = 'all'; render(); toast('Everything erased.'); }, true);
+ACT.wipeAll = () => connected() ? toast('Leave the household first (Profile → Household), then erase.') : confirmDialog('Erase ALL products, recipes you made, drinks and settings on this device? Export first if you might want them back.', 'Erase everything', () => { S = SC.defaultState(); save(); applyTheme(); UI.pantryCat = 'all'; render(); toast('Everything erased.'); }, true);
 ACT.speedCheck = () => {
   const out = $('#speedOut'); out.textContent = 'Running…';
   setTimeout(() => {
@@ -2114,8 +2380,8 @@ SHEETS.productView = (d) => {
 };
 ACT.pvEdit = (el) => openProductForm({ id: el.dataset.id });
 ACT.pvRecount = (el) => openRecount(el.dataset.id);
-ACT.pvAddPack = (el) => { const adj = SC.restock(S, el.dataset.id, 1); save(); render(); toast('Added one ' + (S.products.find((p) => p.id === el.dataset.id).category === 'capsule' ? 'sleeve' : 'pack') + '.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
-ACT.pvOpen = (el) => mutate((s) => { SC.openAPack(s.products.find((p) => p.id === el.dataset.id), today()); });
+ACT.pvAddPack = (el) => { const adj = opRestock(el.dataset.id, 1); save(); render(); toast('Added one ' + (S.products.find((p) => p.id === el.dataset.id).category === 'capsule' ? 'sleeve' : 'pack') + '.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
+ACT.pvOpen = (el) => { emitOp('product.open', { productId: el.dataset.id, date: today() }); mutate((s) => { SC.openAPack(s.products.find((p) => p.id === el.dataset.id), today()); }); };
 ACT.pvDelete = (el) => { const p = S.products.find((x) => x.id === el.dataset.id); confirmDialog('Delete ' + SC.productLabel(p) + '? Past drinks keep their record.', 'Delete', () => { mutate((s) => { s.products = s.products.filter((x) => x.id !== p.id); }); closeSheet(); toast('Deleted.'); }, true); };
 
 // ---------- recount ----------
@@ -2142,8 +2408,8 @@ SHEETS.recount = (d) => {
 CHG.rcField = () => { Object.assign(SHEET.data.f, formData($('#rform'))); renderSheet(); };
 ACT.saveRecount = () => {
   const p = S.products.find((x) => x.id === SHEET.data.id); Object.assign(SHEET.data.f, formData($('#rform'))); const v = SC.validateRecount(p, SHEET.data.f, today()); if (!v.ok) { renderSheet(); return; }
-  const adj = SC.applyRecount(S, p.id, v.value); save(); closeSheet(); render();
-  toast('Recount saved' + (adj.diff === null ? '.' : ' (' + (adj.diff > 0 ? '+' : '') + fmt(adj.diff) + ' ' + p.unit + ').'), 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); });
+  const adj = opRecount(p.id, v.value); save(); closeSheet(); render();
+  toast('Recount saved' + (adj.diff === null ? '.' : ' (' + (adj.diff > 0 ? '+' : '') + fmt(adj.diff) + ' ' + p.unit + ').'), 'Undo', () => { opUndoAdj(adj.id); save(); render(); });
 };
 
 // ---------- quick add & receipt ----------
@@ -2217,7 +2483,7 @@ ACT.confirmRowsSave = () => {
   if (!jobs.length) { toast('Nothing selected.'); return; }
   jobs.forEach((j) => {
     if (j.kind === 'new') { const p = SC.buildProduct(j.v); if (!S.products.some((x) => x.category === p.category && x.usual)) p.usual = true; S.products.push(p); }
-    else if (j.kind === 'cap') j.p.count += j.n; else SC.addPacks(j.p, j.n);
+    else if (j.kind === 'cap') { j.p.count += j.n; emitOp('stock.add', { productId: j.p.id, count: j.n }); } else { SC.addPacks(j.p, j.n); emitOp('stock.add', { productId: j.p.id, packs: j.n }); }
   });
   save(); closeSheet(); render(); toast('Saved ' + jobs.length + ' item' + (jobs.length > 1 ? 's' : '') + '.');
 };
@@ -2323,9 +2589,11 @@ ACT.logUseAlt = (el) => {
 };
 ACT.logSubmit = () => {
   const d = draftOf(); if (!d.name || !String(d.name).trim()) { d.name = 'One-off drink'; }
+  if (!d.id) d.id = SYNC.uuid();
   const res = SC.commitLog(S, d); if (!res.ok) { renderSheet(); return; }
+  emitOp('log.commit', { draft: JSON.parse(JSON.stringify(d)) });
   save(); askPersist(); const log = res.log; closeSheet(); render();
-  toast('Logged ' + log.name + ' · ~' + fmt(log.caffeine, 0) + ' mg caffeine (est.)', 'Undo', () => { SC.undoLog(S, log.id); save(); render(); toast('Undone. Stock restored.'); });
+  toast('Logged ' + log.name + ' · ~' + fmt(log.caffeine, 0) + ' mg caffeine (est.)', 'Undo', () => { opUndoLog(log.id); save(); render(); toast('Undone. Stock restored.'); });
 };
 ACT.editLog = (el) => { const l = S.logs.find((x) => x.id === el.dataset.id); openSheet('editLog', { id: l.id, rating: l.rating, note: l.note, personId: l.personId || '' }); };
 SHEETS.editLog = (d) => { const l = S.logs.find((x) => x.id === d.id); if (!l) return null; return { title: 'Edit ' + l.name, body: '<p class="small muted">Stock is not changed by edits. To change what was used, undo the drink and log it again.</p>' + selectField('personId', 'Who had it', S.people.map((p) => [p.id, p.name]).concat([['', 'Unassigned']]), d.personId, { change: 'elField' }) + '<div class="chips" role="group" aria-label="Rating" style="margin-top:8px">' + [1, 2, 3, 4, 5].map((n) => '<button class="chip" aria-pressed="' + (d.rating === n) + '" data-act="elRate" data-n="' + n + '">' + '★'.repeat(n) + '</button>').join('') + '</div><label class="f" for="f-note">Note</label><input id="f-note" name="note" maxlength="200" data-change="elField" value="' + esc(d.note) + '">', footer: footBtns('closeSheet', 1, 'Save', 'elSave') }; };
@@ -2347,6 +2615,7 @@ ACT.machineSave = () => {
   const dc = SC.parseNum(f.descaleCaps, { min: 1, max: 100000, int: true }); if (!dc.ok) e.descaleCaps = dc.error; const dm = SC.parseNum(f.descaleMonths, { min: 1, max: 120, int: true }); if (!dm.ok) e.descaleMonths = dm.error;
   let caps = 0, last = today(); if (d.id) { const c = SC.parseNum(f.caps, { min: 0, max: 1e6, int: true }); if (!c.ok) e.caps = c.error; else caps = c.value; if (!SC.validDate(f.lastDescaled) || f.lastDescaled > today()) e.lastDescaled = 'Enter a valid past date'; else last = f.lastDescaled; }
   if (Object.keys(e).length) { d.f = Object.assign(d.f, f); d.errors = e; renderSheet(); return; }
+  if (d.id) emitOp('machine.reset', { id: d.id, caps: caps, lastDescaled: last });
   mutate((s) => { if (d.id) { const m = s.machines.find((x) => x.id === d.id); Object.assign(m, { name: name, system: f.system, descaleCaps: dc.value, descaleMonths: dm.value, caps: caps, lastDescaled: last }); } else { const m = SC.makeMachine(name, f.system, today()); m.descaleCaps = dc.value; m.descaleMonths = dm.value; s.machines.push(m); } }); closeSheet();
 };
 ACT.machineDel = () => { const d = SHEET.data; confirmDialog('Remove this machine? Capsules that no longer fit any machine stop counting as stock (they are kept, just hidden).', 'Remove', () => { mutate((s) => { s.machines = s.machines.filter((m) => m.id !== d.id); }); closeSheet(); }, true); };
@@ -2562,6 +2831,177 @@ ACT.gNext = () => {
 };
 ACT.gDone = () => { mutate((s) => { s.settings.onboarded = true; }); closeSheet(); toast('All set. Log a drink from Home whenever you make one.'); };
 
+/* Household sync in the app: backend (Supabase, or a test double), storage, Profile card, sheets, timers.
+   The engine itself (operations, merging) lives in sync.js. Everything here is optional: with no household
+   connected the app behaves exactly as before. */
+'use strict';
+const SYNCUI = { store: null, deviceId: '', backend: null, members: [], myId: '', timersOn: false };
+
+// ---------- storage for the sync copy (IndexedDB, falls back to localStorage) ----------
+function makeStore() {
+  const lsKey = (k) => 'stockcup.' + k;
+  const ls = { get: async (k) => { try { const v = localStorage.getItem(lsKey(k)); return v ? JSON.parse(v) : null; } catch (e) { return null; } }, set: async (k, v) => { try { if (v === null) localStorage.removeItem(lsKey(k)); else localStorage.setItem(lsKey(k), JSON.stringify(v)); } catch (e) { throw new Error('storage full'); } } };
+  if (typeof indexedDB === 'undefined') return ls;
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('stockcup', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const run = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode); const req = fn(t.objectStore('kv')); t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+  return { get: (k) => run('readonly', (s) => s.get(k)).then((v) => (v === undefined ? null : v)).catch(() => ls.get(k)), set: (k, v) => run('readwrite', (s) => (v === null ? s.delete(k) : s.put(v, k))).catch(() => ls.set(k, v)) };
+}
+
+// ---------- backend: Supabase (real) ----------
+const SB = { client: null, loading: null, myId: '' };
+function loadScriptOnce(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Failed to load ' + src)); document.head.appendChild(s); }); }
+async function sbClient() {
+  if (SB.client) return SB.client; if (SB.loading) return SB.loading;
+  SB.loading = (async () => {
+    const cfg = window.STOCKCUP_CONFIG || {};
+    if (!window.supabase) await loadScriptOnce('vendor/supabase/supabase.js');
+    const c = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'stockcup.auth' } });
+    let got = await c.auth.getSession(); let session = got.data && got.data.session;
+    if (!session) { const r = await c.auth.signInAnonymously(); if (r.error) throw new Error(/anonymous/i.test(r.error.message) ? 'Anonymous sign-ins are switched off in your Supabase project (Authentication → Sign In / Providers).' : r.error.message); session = r.data.session; }
+    SB.myId = session.user.id; SB.client = c; return c;
+  })();
+  try { return await SB.loading; } finally { SB.loading = null; }
+}
+function supabaseBackend() {
+  const call = async (fn) => { const c = await sbClient(); const r = await fn(c); if (r.error) throw new Error(r.error.message); return r.data; };
+  return {
+    userId: async () => { await sbClient(); return SB.myId; },
+    create: async (name, label) => { const d = await call((c) => c.rpc('create_household', { p_name: name, p_label: label })); return { id: d[0].household_id, code: d[0].invite_code }; },
+    join: async (code, label) => { const d = await call((c) => c.rpc('join_household', { p_code: code, p_label: label })); const r = d[0]; return r.error ? { error: r.error } : { id: r.household_id, name: r.household_name }; },
+    invite: (hid) => call((c) => c.rpc('new_invite', { p_household: hid })),
+    members: (hid) => call((c) => c.from('members').select('user_id,role,label,joined_at').eq('household_id', hid).order('joined_at', { ascending: true })),
+    remove: (hid, uid) => call((c) => c.rpc('remove_member', { p_household: hid, p_user: uid })),
+    leave: (hid) => call((c) => c.rpc('leave_household', { p_household: hid })),
+    destroy: (hid) => call((c) => c.rpc('delete_household', { p_household: hid })),
+    transport: {
+      async push(hid, rows) { await call((c) => c.from('ops').upsert(rows.map((r) => Object.assign({ household_id: hid }, r)), { onConflict: 'op_id', ignoreDuplicates: true })); },
+      async pull(hid, since, limit) { return call((c) => c.from('ops').select('server_seq,op_id,device_id,type,v,payload').eq('household_id', hid).gt('server_seq', since).order('server_seq', { ascending: true }).limit(limit)); },
+      subscribe(hid, cb) {
+        let ch = null, dead = false;
+        sbClient().then((c) => { if (dead) return; ch = c.channel('ops-' + hid).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ops', filter: 'household_id=eq.' + hid }, () => cb()).subscribe(); }).catch(() => {});
+        return () => { dead = true; if (ch && SB.client) SB.client.removeChannel(ch); };
+      },
+    },
+  };
+}
+function getBackend() { if (!SYNCUI.backend) SYNCUI.backend = window.STOCKCUP_TRANSPORT_FACTORY ? window.STOCKCUP_TRANSPORT_FACTORY() : supabaseBackend(); return SYNCUI.backend; }
+const lazyTransport = { push: (h, r) => getBackend().transport.push(h, r), pull: (h, s, l) => getBackend().transport.pull(h, s, l), subscribe: (h, cb) => getBackend().transport.subscribe(h, cb) };
+function syncAvailable() { const c = window.STOCKCUP_CONFIG || {}; return !!(window.STOCKCUP_TRANSPORT_FACTORY || (c.SUPABASE_URL && c.SUPABASE_ANON_KEY)); }
+const connected = () => !!(SYNC_CLIENT && SYNC_CLIENT.household);
+
+// ---------- hooks used by the rest of the app ----------
+function syncAfterSave() { if (SYNC_CLIENT) SYNC_CLIENT.localChanged(S); }
+function emitOp(type, payload) { if (SYNC_CLIENT) SYNC_CLIENT.emit(type, payload); }
+function opRestock(productId, packs) { const adj = SC.restock(S, productId, packs); emitOp('adj.restock', { id: adj.id, productId: productId, packs: packs, ts: adj.ts }); return adj; }
+function opRecount(productId, v) { const adj = SC.applyRecount(S, productId, v); emitOp('adj.recount', { id: adj.id, productId: productId, v: v, ts: adj.ts }); return adj; }
+function opUndoAdj(id) { const ok = SC.undoAdjustment(S, id); emitOp('adj.undo', { id: id }); return ok; }
+function opUndoLog(id) { const ok = SC.undoLog(S, id); emitOp('log.undo', { id: id }); return ok; }
+// Replace the whole pantry (import). When connected this replaces the shared pantry for everyone.
+function replaceAllState(data) { S = data; if (connected()) SYNC_CLIENT.snapshotAll(S); saveRaw(); }
+
+// ---------- startup, timers, status ----------
+async function syncInit() {
+  try { let d = localStorage.getItem('stockcup.device'); if (!d) { d = SYNC.uuid(); localStorage.setItem('stockcup.device', d); } SYNCUI.deviceId = d; } catch (e) { SYNCUI.deviceId = SYNC.uuid(); }
+  SYNCUI.store = makeStore();
+  SYNC_CLIENT = SYNC.createClient({ transport: lazyTransport, store: SYNCUI.store, getState: () => S, setState: (s) => { S = s; saveRaw(); render(true); }, deviceId: SYNCUI.deviceId, onChange: syncChanged });
+  let had = false; try { had = await SYNC_CLIENT.load(); } catch (e) { had = false; }
+  if (had) { SYNC_CLIENT.start(); startSyncTimers(); refreshMembers(); render(true); }
+}
+function startSyncTimers() {
+  if (SYNCUI.timersOn) return; SYNCUI.timersOn = true;
+  setInterval(() => { if (!document.hidden && connected()) SYNC_CLIENT.sync(); }, 30000);
+  window.addEventListener('online', () => { if (connected()) SYNC_CLIENT.sync(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && connected()) SYNC_CLIENT.sync(); });
+}
+function statusLabel(c) {
+  const n = c.pendingCount();
+  if (c.status === 'offline') return 'Offline' + (n ? ' · ' + n + ' waiting' : '');
+  if (c.status === 'error') return 'Sync problem';
+  if (c.status === 'syncing' || c.status === 'connecting') return n ? 'Syncing · ' + n + ' waiting' : 'Syncing…';
+  return 'Synced';
+}
+function syncPill() { return connected() ? '<span class="syncpill ' + SYNC_CLIENT.status + '" role="status">' + esc(statusLabel(SYNC_CLIENT)) + '</span>' : ''; }
+function syncChanged() {
+  document.querySelectorAll('.syncpill').forEach((el) => { el.className = 'syncpill ' + SYNC_CLIENT.status; el.textContent = statusLabel(SYNC_CLIENT); });
+  const card = $('#syncCard'); if (card) card.innerHTML = syncCardInner();
+}
+async function refreshMembers() {
+  if (!connected()) { SYNCUI.members = []; return; }
+  try { const b = getBackend(); SYNCUI.myId = await b.userId(); SYNCUI.members = await b.members(SYNC_CLIENT.household.id); const card = $('#syncCard'); if (card) card.innerHTML = syncCardInner(); } catch (e) { /* offline: keep the old list */ }
+}
+function friendly(e) {
+  const m = String((e && e.message) || e);
+  if (/Failed to fetch|NetworkError|network|Failed to load|offline/i.test(m)) return 'No connection. Try again when you are online.';
+  if (/invalid_or_expired_code/.test(m)) return 'That code did not work. Check it, or ask for a new one (codes last 7 days).';
+  if (/too_many_attempts/.test(m)) return 'Too many tries. Please wait 10 minutes and try again.';
+  if (/too many households/i.test(m)) return 'You already have the maximum of 3 households.';
+  return m;
+}
+const fmtCode = (c) => String(c).replace(/(.{4})(?=.)/g, '$1-');
+
+// ---------- Profile card ----------
+function syncCardHtml() { return '<h2>Household</h2><div class="card stack" id="syncCard">' + syncCardInner() + '</div>'; }
+function syncCardInner() {
+  if (!syncAvailable()) return '<p class="small muted">Share one pantry between phones with a household. This needs a free Supabase project, set up once by whoever runs the app (see <b>README → Household sync</b>). Until then StockCup works on this device only.</p>';
+  if (!connected()) return '<p class="small muted">Share one pantry with the people you live with. Stock, drinks and recipes stay in step on every phone, and each phone still works offline.</p><button class="primary big" data-act="syncCreate">Create a household</button><button class="big" data-act="syncJoin">Join with an invite code</button>';
+  const hh = SYNC_CLIENT.household; const mine = SYNCUI.members.find((m) => m.user_id === SYNCUI.myId); const owner = !!(mine && mine.role === 'owner');
+  const skipped = SYNC_CLIENT.skipped.length;
+  return '<div class="row"><div class="grow"><b>' + esc(hh.name) + '</b><div class="small muted">' + (mine ? 'You are ' + esc(mine.label) + (owner ? ' (owner)' : '') : 'Connected') + '</div></div>' + syncPill() + '</div>' +
+    (SYNC_CLIENT.status === 'error' ? '<div class="errbox">' + esc(SYNC_CLIENT.error) + '</div>' : '') +
+    (SYNCUI.members.length ? '<div>' + SYNCUI.members.map((m) => '<div class="row" style="margin:4px 0"><div class="grow">' + esc(m.label) + (m.role === 'owner' ? ' <span class="badge acc">owner</span>' : '') + (m.user_id === SYNCUI.myId ? ' <span class="badge">you</span>' : '') + '</div>' + (owner && m.user_id !== SYNCUI.myId ? '<button class="small danger" data-act="syncRemove" data-id="' + esc(m.user_id) + '" data-label="' + esc(m.label) + '" aria-label="Remove ' + esc(m.label) + '">Remove</button>' : '') + '</div>').join('') + '</div>' : '') +
+    (owner ? '<button class="big" data-act="syncInvite">Invite someone</button>' : '') +
+    (skipped ? '<div class="small muted">' + skipped + ' change' + (skipped > 1 ? 's' : '') + ' from other phones could not be applied (for example a drink using a product that was deleted).</div>' : '') +
+    '<button class="big" data-act="syncLeave">Leave household</button>' + (owner ? '<button class="big danger" data-act="syncDestroy">Delete household for everyone</button>' : '');
+}
+
+// ---------- sheets ----------
+const nameDefault = () => (activePerson().name || '').slice(0, 40);
+ACT.syncCreate = () => {
+  if (S.settings.sampleLoaded) { toast('Clear the sample pantry first (Profile → Your data).'); return; }
+  openSheet('syncCreate', { hname: 'Home', label: nameDefault(), err: '' });
+};
+SHEETS.syncCreate = (d) => ({ title: 'Create a household', body: '<p class="muted">Your current pantry on this phone becomes the household pantry. Then you get an invite code to give to the others.</p>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('hname', 'Household name', d.hname) + field('label', 'What should others see you as?', d.label), footer: footBtns('closeSheet', 1, 'Create', 'syncDoCreate') });
+ACT.syncDoCreate = async () => {
+  const d = SHEET.data; d.hname = $('#f-hname').value.trim(); d.label = $('#f-label').value.trim();
+  if (!d.hname || d.hname.length > 60) { d.err = 'Enter a household name (up to 60 characters).'; renderSheet(); return; }
+  if (!d.label || d.label.length > 40) { d.err = 'Enter a name for yourself (up to 40 characters).'; renderSheet(); return; }
+  const keep = { hname: d.hname, label: d.label }; openSheet('syncBusy', { msg: 'Creating your household…' });
+  try {
+    const r = await getBackend().create(keep.hname, keep.label); await SYNC_CLIENT.attach({ id: r.id, name: keep.hname }, false, true); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers();
+    render(true); openSheet('syncInvite', { code: r.code, name: keep.hname, fresh: true });
+  } catch (e) { openSheet('syncCreate', Object.assign(keep, { err: friendly(e) })); }
+};
+ACT.syncJoin = () => openSheet('syncJoin', { code: '', label: nameDefault(), err: '' });
+SHEETS.syncJoin = (d) => ({ title: 'Join a household', body: '<div class="warnbox"><b>This replaces the pantry on this phone</b> with the household’s pantry. If you want to keep what is here, export it first.</div><button class="small" data-act="exportData">⬇ Export my pantry first</button>' + (d.err ? '<div class="errbox">' + esc(d.err) + '</div>' : '') + field('code', 'Invite code', d.code, { ph: 'XXXX-XXXX-XXXX', auto: 'off' }) + field('label', 'What should others see you as?', d.label), footer: footBtns('closeSheet', 1, 'Join', 'syncDoJoin') });
+ACT.syncDoJoin = async () => {
+  const d = SHEET.data; d.code = $('#f-code').value.trim(); d.label = $('#f-label').value.trim();
+  if (d.code.replace(/[^A-Za-z0-9]/g, '').length < 8) { d.err = 'Type the whole invite code.'; renderSheet(); return; }
+  if (!d.label || d.label.length > 40) { d.err = 'Enter a name for yourself (up to 40 characters).'; renderSheet(); return; }
+  const keep = { code: d.code, label: d.label }; openSheet('syncBusy', { msg: 'Joining…' });
+  try {
+    const r = await getBackend().join(keep.code, keep.label); if (r.error) throw new Error(r.error);
+    await SYNC_CLIENT.attach({ id: r.id, name: r.name }, true, false); startSyncTimers(); await SYNC_CLIENT.start(); await refreshMembers(); closeSheet(); render(); toast('Joined ' + r.name + '.');
+  } catch (e) { openSheet('syncJoin', Object.assign(keep, { err: friendly(e) })); }
+};
+SHEETS.syncBusy = (d) => ({ title: 'One moment', noClose: true, body: '<div class="empty"><div class="big-ic">⏳</div><p>' + esc(d.msg) + '</p></div>' });
+ACT.syncInvite = async () => {
+  openSheet('syncBusy', { msg: 'Making an invite code…' });
+  try { const code = await getBackend().invite(SYNC_CLIENT.household.id); openSheet('syncInvite', { code: code, name: SYNC_CLIENT.household.name }); } catch (e) { closeSheet(); toast(friendly(e)); }
+};
+SHEETS.syncInvite = (d) => ({ title: 'Invite code', body: (d.fresh ? '<div class="okbox">“' + esc(d.name) + '” is ready and your pantry is uploading.</div>' : '') + '<p class="muted">Give this code to the person joining. It works for 7 days and up to 5 people.</p><div class="codebox" id="inviteCode" aria-label="Invite code">' + esc(fmtCode(d.code)) + '</div><div class="grid2" style="margin-top:10px"><button data-act="syncCopy" data-code="' + esc(d.code) + '">Copy</button><button data-act="syncShare" data-code="' + esc(d.code) + '" data-name="' + esc(d.name) + '">Share…</button></div><p class="small muted">Anyone with the code can join, so only share it with people you trust. You can remove anyone later.</p>', footer: '<button class="primary" data-act="closeSheet">Done</button>' });
+ACT.syncCopy = (el) => { const c = fmtCode(el.dataset.code); (navigator.clipboard ? navigator.clipboard.writeText(c) : Promise.reject()).then(() => toast('Code copied.'), () => toast('Select the code and copy it by hand.')); };
+ACT.syncShare = (el) => { const text = 'Join our StockCup household “' + el.dataset.name + '” with this code: ' + fmtCode(el.dataset.code); if (navigator.share) navigator.share({ title: 'StockCup', text: text }).catch(() => {}); else ACT.syncCopy(el); };
+ACT.syncRemove = (el) => confirmDialog('Remove ' + el.dataset.label + ' from the household? They keep a copy on their phone but stop syncing.', 'Remove', async () => { try { await getBackend().remove(SYNC_CLIENT.household.id, el.dataset.id); await refreshMembers(); toast('Removed.'); } catch (e) { toast(friendly(e)); } }, true);
+ACT.syncLeave = () => confirmDialog('Leave this household? You keep a copy of the pantry on this phone, but it stops syncing with the others.', 'Leave', async () => {
+  const id = SYNC_CLIENT.household.id; let note = '';
+  try { await getBackend().leave(id); } catch (e) { note = ' (You were offline, so the household may still list you until an owner removes you.)'; }
+  await SYNC_CLIENT.detach(); SYNCUI.members = []; render(); toast('Left the household.' + note);
+}, true);
+ACT.syncDestroy = () => confirmDialog('Delete this household for everyone? Everyone keeps their own copy, but nothing will sync any more. This cannot be undone.', 'Delete household', async () => {
+  const id = SYNC_CLIENT.household.id; try { await getBackend().destroy(id); await SYNC_CLIENT.detach(); SYNCUI.members = []; render(); toast('Household deleted.'); } catch (e) { toast(friendly(e)); }
+}, true);
+
 /* StockCup entry point. */
 'use strict';
 // ---------- installable offline app (service worker, install prompt, durable storage) ----------
@@ -2606,7 +3046,8 @@ function appCardHtml() {
   window.addEventListener('error', (e) => { try { toast('Something went wrong: ' + (e.message || 'unknown error')); } catch (x) { /* ignore */ } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && TIMER) render(); });
   setupPwa();
-  window.__stockcup = { get state() { return S; }, SC: SC, SCP: SCP };
+  syncInit();
+  window.__stockcup = { get state() { return S; }, SC: SC, SCP: SCP, SYNC: SYNC };
 })();
 
 

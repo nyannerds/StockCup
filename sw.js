@@ -3,10 +3,10 @@
    - vendor/ocr/* (about 11 MB) is cached the first time the receipt/photo reader uses it, then works offline.
    - A new version waits until the user taps "Reload" in the app, so an edit in progress is never interrupted.
    - Cross-origin requests (for example the sync server) and non-GET requests are never touched. */
-const VERSION = 'f07a6a5610';
+const VERSION = 'f883237f5b';
 const SHELL_CACHE = 'stockcup-shell-' + VERSION;
 const OCR_CACHE = 'stockcup-ocr-v1';
-const SHELL = ["./","index.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"];
+const SHELL = ["./","index.html","config.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL)));
@@ -24,7 +24,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url); if (url.origin !== self.location.origin) return;
   if (url.pathname.indexOf('/api/') === 0) return; // serverless functions: always live
-  if (url.pathname.indexOf('/vendor/ocr/') >= 0) {
+  if (url.pathname.indexOf('/vendor/') >= 0) { // OCR engine and sync library: cached the first time they are used
     e.respondWith(caches.open(OCR_CACHE).then(async (c) => { const hit = await c.match(req); if (hit) return hit; const res = await fetch(req); if (res.ok) c.put(req, res.clone()); return res; }));
     return;
   }

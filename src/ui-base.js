@@ -10,7 +10,7 @@ let S = null;               // application state (see SC.defaultState)
 let storageNote = '';       // shown when the browser blocks or rejects saving
 const UI = { page: 'home', pantryCat: 'all', pantryQ: '', rview: 'make', rf: { serve: '', caf: '', dairyFree: false, fav: false, q: '' }, hwho: 'all', hmonth: today().slice(0, 7), lastLogId: null };
 const ACT = {}, CHG = {}, SUB = {}, INP = {}, VIEWS = {}, SHEETS = {};
-let SHEET = null; let pendingConfirm = null; let toastTimer = null;
+let SHEET = null; let pendingConfirm = null; let toastTimer = null; let SYNC_CLIENT = null;
 
 // ---------- storage ----------
 function loadState() {
@@ -23,11 +23,12 @@ function loadState() {
     return SC.defaultState();
   }
 }
-function save() {
+function saveRaw() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); if (storageNote.indexOf('full') >= 0) storageNote = ''; return true; } catch (e) {
-    storageNote = 'Could not save: browser storage is full or blocked. Export your data now from More.'; return false;
+    storageNote = 'Could not save: browser storage is full or blocked. Export your data now from Profile.'; return false;
   }
 }
+function save() { const ok = saveRaw(); syncAfterSave(); return ok; }
 function mutate(fn) { fn(S); save(); render(); }
 function applyTheme() {
   const t = S.settings.theme; const r = document.documentElement;
@@ -113,9 +114,9 @@ function hero(title, extra, home) {
   if (home) {
     const n = alertCount();
     return '<header class="hero"><div class="hero-top"><div class="logo">' + ICON.logo + '<span>StockCup</span></div><button class="searchbar" data-act="openSearch" aria-label="Search pantry and recipes"><span>Search here …</span>' + ICON.search + '</button></div>' +
-      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span></div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
+      '<div class="welcome">' + avatarBtn() + '<div class="who grow"><b>Welcome!</b><span>' + esc(activePerson().name) + '</span> ' + syncPill() + '</div><button class="iconbtn" data-act="openBell" aria-label="Notifications' + (n ? ', ' + n + ' need attention' : ', none') + '">' + ICON.bell + (n ? '<span class="count">' + n + '</span>' : '') + '</button></div></header>' + notes;
   }
-  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div></header>' + notes;
+  return '<header class="hero"><div class="hero-top"><h1>' + esc(title) + '</h1>' + (extra || '') + avatarBtn() + '</div>' + (connected() ? '<div class="hero-sub">' + syncPill() + '</div>' : '') + '</header>' + notes;
 }
 
 // In-place DOM reconciliation: keeps the same elements (and focus) so a tap is never lost to a re-render.
@@ -145,15 +146,15 @@ function paint(container, html, fresh) {
   const t = document.createElement('div'); t.innerHTML = html; patchChildren(container, t);
 }
 let rendering = false, lastPage = null;
-function render() {
+function render(keepSheet) {
   if (!S) return;
-  if (rendering) { setTimeout(render, 0); return; }
+  if (rendering) { setTimeout(() => render(keepSheet), 0); return; }
   rendering = true;
   try {
     const view = VIEWS[UI.page] || VIEWS.home; const y = window.scrollY; const fresh = lastPage !== UI.page; lastPage = UI.page;
     paint($('#app'), view() + navHtml(), fresh);
     if (fresh) window.scrollTo(0, y);
-    renderSheet();
+    if (!keepSheet) renderSheet(); // a remote update must not reset a form that is being filled in
   } finally { rendering = false; }
 }
 

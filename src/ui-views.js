@@ -75,9 +75,9 @@ ACT.seeAging = () => { UI.pantryCat = 'aging'; go('pantry'); };
 ACT.toShopping = () => go('shopping');
 ACT.seeMake = () => { UI.rview = 'make'; go('recipes'); };
 ACT.dismissRecount = () => mutate((s) => { s.settings.recountMark = s.logs.length; });
-ACT.descaled = (el) => mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } });
+ACT.descaled = (el) => { emitOp('machine.reset', { id: el.dataset.id, caps: 0, lastDescaled: today() }); mutate((s) => { const m = s.machines.find((x) => x.id === el.dataset.id); if (m) { m.caps = 0; m.lastDescaled = today(); } }); };
 ACT.addMissing = (el, e) => { e.stopPropagation(); openProductForm({ category: el.dataset.cat }); };
-ACT.loadSample = () => { mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
+ACT.loadSample = () => { if (connected()) { toast('The sample pantry cannot be used while connected to a household.'); return; } mutate((s) => { SC.loadSample(s, today()); }); toast('Sample pantry loaded. Clear it any time in Profile.'); };
 
 // ---------- PANTRY ----------
 function pantryItems() {
@@ -187,8 +187,8 @@ VIEWS.history = () => {
 };
 ACT.hwho = (el) => { UI.hwho = el.dataset.v; render(); };
 ACT.hmonth = (el) => { const [y, m] = UI.hmonth.split('-').map(Number); const d = new Date(y, m - 1 + Number(el.dataset.d), 1); UI.hmonth = d.getFullYear() + '-' + SC.pad(d.getMonth() + 1); render(); };
-ACT.undoLogAsk = (el) => confirmDialog('Undo this drink? The stock it used will be put back.', 'Undo drink', () => { const ok = SC.undoLog(S, el.dataset.id); save(); render(); toast(ok ? 'Drink removed and stock restored.' : 'Could not find that drink.'); }, true);
-ACT.undoAdj = (el) => { SC.undoAdjustment(S, el.dataset.id); save(); render(); toast('Adjustment undone.'); };
+ACT.undoLogAsk = (el) => confirmDialog('Undo this drink? The stock it used will be put back.', 'Undo drink', () => { const ok = opUndoLog(el.dataset.id); save(); render(); toast(ok ? 'Drink removed and stock restored.' : 'Could not find that drink.'); }, true);
+ACT.undoAdj = (el) => { opUndoAdj(el.dataset.id); save(); render(); toast('Adjustment undone.'); };
 
 // ---------- SHOPPING ----------
 VIEWS.shopping = () => {
@@ -208,8 +208,8 @@ VIEWS.shopping = () => {
   h += '<form data-submit="addShop" class="card"><label class="f" for="f-shoplabel">Add something to buy</label><div class="row"><input id="f-shoplabel" name="label" maxlength="60" placeholder="e.g. paper filters" autocomplete="off"><button class="primary">Add</button></div></form>';
   return h;
 };
-ACT.bought = (el) => { const adj = SC.restock(S, el.dataset.id, 1); save(); render(); toast('Restocked the usual pack.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
-ACT.boughtExtra = (el) => { const adj = SC.restock(S, el.dataset.pid, 1); S.shopping = S.shopping.filter((x) => x.id !== el.dataset.id); save(); render(); toast('Restocked and removed from the list.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
+ACT.bought = (el) => { const adj = opRestock(el.dataset.id, 1); save(); render(); toast('Restocked the usual pack.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
+ACT.boughtExtra = (el) => { const adj = opRestock(el.dataset.pid, 1); S.shopping = S.shopping.filter((x) => x.id !== el.dataset.id); save(); render(); toast('Restocked and removed from the list.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
 ACT.dropExtra = (el) => mutate((s) => { s.shopping = s.shopping.filter((x) => x.id !== el.dataset.id); });
 SUB.addShop = (f) => { const v = formData(f).label.trim(); if (!v) { toast('Type what to buy first.'); return; } if (v.length > 60) { toast('That is too long.'); return; } mutate((s) => { s.shopping.push({ id: SC.uid(), label: v, note: '' }); }); };
 
@@ -250,6 +250,7 @@ VIEWS.more = () => {
   let h = hero('Profile');
   h += '<div class="profilecard">' + avatarBtn().replace('data-act="nextPerson"', 'data-act="nextPerson"') + '<div class="grow"><b style="font:700 1.25rem var(--display)">' + esc(activePerson().name) + '</b><div class="small" style="opacity:.92">Active person · tap the circle to switch</div></div></div>';
   h += '<div class="linkrows"><button data-act="go" data-page="history"><span>📊 Log & insights</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="shopping"><span>🛒 Shopping list' + (lowN ? ' (' + lowN + ')' : '') + '</span><span aria-hidden="true">›</span></button><button data-act="go" data-page="plan"><span>🎉 Guest plan</span><span aria-hidden="true">›</span></button></div>';
+  h += syncCardHtml();
   h += '<h2>People</h2><div class="card"><p class="small muted">Names only, no logins. Stock is shared; each drink is tagged with who had it.</p>' + S.people.map((p) =>
     '<div class="row"><div class="grow">' + (p.id === S.settings.activePerson ? '<b>' + esc(p.name) + '</b> <span class="badge acc">active</span>' : esc(p.name)) + '</div>' + (p.id === S.settings.activePerson ? '' : '<button class="small" data-act="setPerson" data-id="' + p.id + '">Use</button>') + '<button class="small" data-act="renamePerson" data-id="' + p.id + '">Rename</button><button class="small danger" data-act="delPerson" data-id="' + p.id + '" aria-label="Delete ' + esc(p.name) + '">✕</button></div>').join('') +
     '<form data-submit="addPerson" class="row" style="margin-top:8px"><input name="name" maxlength="40" placeholder="Add a person" aria-label="New person name" autocomplete="off"><button class="primary">Add</button></form></div>';
@@ -302,14 +303,14 @@ CHG.importFile = (el) => {
   r.onload = () => {
     try {
       const data = SC.importData(String(r.result));
-      confirmDialog('Replace everything on this device with the file’s data? (' + data.products.length + ' products, ' + data.logs.length + ' logged drinks.) This cannot be undone.', 'Replace', () => { S = data; save(); applyTheme(); render(); toast('Import complete.'); }, true);
+      confirmDialog((connected() ? 'You are connected to a household: this replaces the SHARED pantry for everyone. ' : '') + 'Replace everything on this device with the file’s data? (' + data.products.length + ' products, ' + data.logs.length + ' logged drinks.) This cannot be undone.', 'Replace', () => { replaceAllState(data); applyTheme(); render(); toast(connected() ? 'Import complete. The shared pantry was replaced for everyone.' : 'Import complete.'); }, true);
     } catch (e) { toast('Import failed: ' + e.message, null, null, 6000); }
   };
   r.onerror = () => toast('Could not read that file.'); r.readAsText(file); el.value = '';
 };
 ACT.restoreBuiltins = () => mutate((s) => { SC.builtinRecipes().forEach((b) => { if (!s.recipes.some((r) => r.id === b.id)) s.recipes.push(b); }); toast('Built-in recipes restored.'); });
 ACT.clearSample = () => confirmDialog('Remove the sample products, sample drinks and sample people? Your own data stays.', 'Clear sample', () => { mutate((s) => { SC.clearSample(s); }); toast('Sample cleared.'); }, true);
-ACT.wipeAll = () => confirmDialog('Erase ALL products, recipes you made, drinks and settings on this device? Export first if you might want them back.', 'Erase everything', () => { S = SC.defaultState(); save(); applyTheme(); UI.pantryCat = 'all'; render(); toast('Everything erased.'); }, true);
+ACT.wipeAll = () => connected() ? toast('Leave the household first (Profile → Household), then erase.') : confirmDialog('Erase ALL products, recipes you made, drinks and settings on this device? Export first if you might want them back.', 'Erase everything', () => { S = SC.defaultState(); save(); applyTheme(); UI.pantryCat = 'all'; render(); toast('Everything erased.'); }, true);
 ACT.speedCheck = () => {
   const out = $('#speedOut'); out.textContent = 'Running…';
   setTimeout(() => {

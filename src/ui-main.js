@@ -42,6 +42,7 @@ function appCardHtml() {
   window.addEventListener('error', (e) => { try { toast('Something went wrong: ' + (e.message || 'unknown error')); } catch (x) { /* ignore */ } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && TIMER) render(); });
   setupPwa();
-  window.__stockcup = { get state() { return S; }, SC: SC, SCP: SCP };
+  syncInit();
+  window.__stockcup = { get state() { return S; }, SC: SC, SCP: SCP, SYNC: SYNC };
 })();
 

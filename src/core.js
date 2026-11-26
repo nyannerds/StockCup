@@ -646,7 +646,7 @@ const SC = (function () {
       const lu = state.settings.lastUsed = state.settings.lastUsed || {};
       lu[(draft.recipeId || '') + ':' + pt.slotType] = p.id; lu[pt.slotType] = p.id;
     });
-    const log = { id: uid(), ts: draft.ts, personId: draft.personId, recipeId: draft.recipeId, name: draft.name, servings: draft.servings, parts: parts,
+    const log = { id: draft.id || uid(), ts: draft.ts, personId: draft.personId, recipeId: draft.recipeId, name: draft.name, servings: draft.servings, parts: parts,
       caffeine: ev.caffeine, cost: ev.cost, costUnknown: ev.costUnknown, dairyFree: ev.dairyFree, rating: draft.rating || null, note: draft.note || '',
       slotsMeta: draft.slots.map((s) => ({ i: s.i, enabled: s.enabled !== false })), free: !draft.recipeId };
     if (draft.sample) log.sample = true;
@@ -708,17 +708,17 @@ const SC = (function () {
     }
     return { ok: Object.keys(errors).length === 0, errors: errors, value: v };
   }
-  function applyRecount(state, productId, v, ts) {
+  function applyRecount(state, productId, v, ts, id) {
     const p = state.products.find((x) => x.id === productId); if (!p) return null;
     const before = snapshot(p); const prev = recountPreview(p, v);
     if (p.category === 'capsule') p.count = v.count; else { p.sealed = v.sealed; p.open = v.open; }
-    const adj = { id: uid(), ts: ts || localDateTime(), kind: 'recount', productId: p.id, productLabel: productLabel(p), unit: p.unit, before: before, after: snapshot(p), diff: prev.diff, oldTotal: prev.oldTotal, newTotal: prev.newTotal, newUnknown: prev.newUnknown };
+    const adj = { id: id || uid(), ts: ts || localDateTime(), kind: 'recount', productId: p.id, productLabel: productLabel(p), unit: p.unit, before: before, after: snapshot(p), diff: prev.diff, oldTotal: prev.oldTotal, newTotal: prev.newTotal, newUnknown: prev.newUnknown };
     state.adjustments.push(adj); state.settings.recountMark = state.logs.length; return adj;
   }
-  function restock(state, productId, packs, ts) {
+  function restock(state, productId, packs, ts, id) {
     const p = state.products.find((x) => x.id === productId); if (!p) return null;
     packs = packs || 1; const before = snapshot(p); addPacks(p, packs);
-    const adj = { id: uid(), ts: ts || localDateTime(), kind: 'restock', productId: p.id, productLabel: productLabel(p), unit: p.unit, packs: packs, before: before, after: snapshot(p), diff: p.category === 'capsule' ? packs * p.size : packs * p.size, chunks: [{ k: 'pack', n: packs }] };
+    const adj = { id: id || uid(), ts: ts || localDateTime(), kind: 'restock', productId: p.id, productLabel: productLabel(p), unit: p.unit, packs: packs, before: before, after: snapshot(p), diff: p.category === 'capsule' ? packs * p.size : packs * p.size, chunks: [{ k: 'pack', n: packs }] };
     state.adjustments.push(adj); return adj;
   }
   function undoAdjustment(state, adjId) {

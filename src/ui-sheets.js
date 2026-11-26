@@ -100,8 +100,8 @@ SHEETS.productView = (d) => {
 };
 ACT.pvEdit = (el) => openProductForm({ id: el.dataset.id });
 ACT.pvRecount = (el) => openRecount(el.dataset.id);
-ACT.pvAddPack = (el) => { const adj = SC.restock(S, el.dataset.id, 1); save(); render(); toast('Added one ' + (S.products.find((p) => p.id === el.dataset.id).category === 'capsule' ? 'sleeve' : 'pack') + '.', 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); }); };
-ACT.pvOpen = (el) => mutate((s) => { SC.openAPack(s.products.find((p) => p.id === el.dataset.id), today()); });
+ACT.pvAddPack = (el) => { const adj = opRestock(el.dataset.id, 1); save(); render(); toast('Added one ' + (S.products.find((p) => p.id === el.dataset.id).category === 'capsule' ? 'sleeve' : 'pack') + '.', 'Undo', () => { opUndoAdj(adj.id); save(); render(); }); };
+ACT.pvOpen = (el) => { emitOp('product.open', { productId: el.dataset.id, date: today() }); mutate((s) => { SC.openAPack(s.products.find((p) => p.id === el.dataset.id), today()); }); };
 ACT.pvDelete = (el) => { const p = S.products.find((x) => x.id === el.dataset.id); confirmDialog('Delete ' + SC.productLabel(p) + '? Past drinks keep their record.', 'Delete', () => { mutate((s) => { s.products = s.products.filter((x) => x.id !== p.id); }); closeSheet(); toast('Deleted.'); }, true); };
 
 // ---------- recount ----------
@@ -128,8 +128,8 @@ SHEETS.recount = (d) => {
 CHG.rcField = () => { Object.assign(SHEET.data.f, formData($('#rform'))); renderSheet(); };
 ACT.saveRecount = () => {
   const p = S.products.find((x) => x.id === SHEET.data.id); Object.assign(SHEET.data.f, formData($('#rform'))); const v = SC.validateRecount(p, SHEET.data.f, today()); if (!v.ok) { renderSheet(); return; }
-  const adj = SC.applyRecount(S, p.id, v.value); save(); closeSheet(); render();
-  toast('Recount saved' + (adj.diff === null ? '.' : ' (' + (adj.diff > 0 ? '+' : '') + fmt(adj.diff) + ' ' + p.unit + ').'), 'Undo', () => { SC.undoAdjustment(S, adj.id); save(); render(); });
+  const adj = opRecount(p.id, v.value); save(); closeSheet(); render();
+  toast('Recount saved' + (adj.diff === null ? '.' : ' (' + (adj.diff > 0 ? '+' : '') + fmt(adj.diff) + ' ' + p.unit + ').'), 'Undo', () => { opUndoAdj(adj.id); save(); render(); });
 };
 
 // ---------- quick add & receipt ----------
@@ -203,7 +203,7 @@ ACT.confirmRowsSave = () => {
   if (!jobs.length) { toast('Nothing selected.'); return; }
   jobs.forEach((j) => {
     if (j.kind === 'new') { const p = SC.buildProduct(j.v); if (!S.products.some((x) => x.category === p.category && x.usual)) p.usual = true; S.products.push(p); }
-    else if (j.kind === 'cap') j.p.count += j.n; else SC.addPacks(j.p, j.n);
+    else if (j.kind === 'cap') { j.p.count += j.n; emitOp('stock.add', { productId: j.p.id, count: j.n }); } else { SC.addPacks(j.p, j.n); emitOp('stock.add', { productId: j.p.id, packs: j.n }); }
   });
   save(); closeSheet(); render(); toast('Saved ' + jobs.length + ' item' + (jobs.length > 1 ? 's' : '') + '.');
 };
@@ -309,9 +309,11 @@ ACT.logUseAlt = (el) => {
 };
 ACT.logSubmit = () => {
   const d = draftOf(); if (!d.name || !String(d.name).trim()) { d.name = 'One-off drink'; }
+  if (!d.id) d.id = SYNC.uuid();
   const res = SC.commitLog(S, d); if (!res.ok) { renderSheet(); return; }
+  emitOp('log.commit', { draft: JSON.parse(JSON.stringify(d)) });
   save(); askPersist(); const log = res.log; closeSheet(); render();
-  toast('Logged ' + log.name + ' · ~' + fmt(log.caffeine, 0) + ' mg caffeine (est.)', 'Undo', () => { SC.undoLog(S, log.id); save(); render(); toast('Undone. Stock restored.'); });
+  toast('Logged ' + log.name + ' · ~' + fmt(log.caffeine, 0) + ' mg caffeine (est.)', 'Undo', () => { opUndoLog(log.id); save(); render(); toast('Undone. Stock restored.'); });
 };
 ACT.editLog = (el) => { const l = S.logs.find((x) => x.id === el.dataset.id); openSheet('editLog', { id: l.id, rating: l.rating, note: l.note, personId: l.personId || '' }); };
 SHEETS.editLog = (d) => { const l = S.logs.find((x) => x.id === d.id); if (!l) return null; return { title: 'Edit ' + l.name, body: '<p class="small muted">Stock is not changed by edits. To change what was used, undo the drink and log it again.</p>' + selectField('personId', 'Who had it', S.people.map((p) => [p.id, p.name]).concat([['', 'Unassigned']]), d.personId, { change: 'elField' }) + '<div class="chips" role="group" aria-label="Rating" style="margin-top:8px">' + [1, 2, 3, 4, 5].map((n) => '<button class="chip" aria-pressed="' + (d.rating === n) + '" data-act="elRate" data-n="' + n + '">' + '★'.repeat(n) + '</button>').join('') + '</div><label class="f" for="f-note">Note</label><input id="f-note" name="note" maxlength="200" data-change="elField" value="' + esc(d.note) + '">', footer: footBtns('closeSheet', 1, 'Save', 'elSave') }; };
@@ -333,6 +335,7 @@ ACT.machineSave = () => {
   const dc = SC.parseNum(f.descaleCaps, { min: 1, max: 100000, int: true }); if (!dc.ok) e.descaleCaps = dc.error; const dm = SC.parseNum(f.descaleMonths, { min: 1, max: 120, int: true }); if (!dm.ok) e.descaleMonths = dm.error;
   let caps = 0, last = today(); if (d.id) { const c = SC.parseNum(f.caps, { min: 0, max: 1e6, int: true }); if (!c.ok) e.caps = c.error; else caps = c.value; if (!SC.validDate(f.lastDescaled) || f.lastDescaled > today()) e.lastDescaled = 'Enter a valid past date'; else last = f.lastDescaled; }
   if (Object.keys(e).length) { d.f = Object.assign(d.f, f); d.errors = e; renderSheet(); return; }
+  if (d.id) emitOp('machine.reset', { id: d.id, caps: caps, lastDescaled: last });
   mutate((s) => { if (d.id) { const m = s.machines.find((x) => x.id === d.id); Object.assign(m, { name: name, system: f.system, descaleCaps: dc.value, descaleMonths: dm.value, caps: caps, lastDescaled: last }); } else { const m = SC.makeMachine(name, f.system, today()); m.descaleCaps = dc.value; m.descaleMonths = dm.value; s.machines.push(m); } }); closeSheet();
 };
 ACT.machineDel = () => { const d = SHEET.data; confirmDialog('Remove this machine? Capsules that no longer fit any machine stop counting as stock (they are kept, just hidden).', 'Remove', () => { mutate((s) => { s.machines = s.machines.filter((m) => m.id !== d.id); }); closeSheet(); }, true); };

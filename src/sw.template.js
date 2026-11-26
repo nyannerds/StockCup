@@ -24,7 +24,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url); if (url.origin !== self.location.origin) return;
   if (url.pathname.indexOf('/api/') === 0) return; // serverless functions: always live
-  if (url.pathname.indexOf('/vendor/ocr/') >= 0) {
+  if (url.pathname.indexOf('/vendor/') >= 0) { // OCR engine and sync library: cached the first time they are used
     e.respondWith(caches.open(OCR_CACHE).then(async (c) => { const hit = await c.match(req); if (hit) return hit; const res = await fetch(req); if (res.ok) c.put(req, res.clone()); return res; }));
     return;
   }
