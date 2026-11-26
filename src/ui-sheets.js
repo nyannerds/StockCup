@@ -310,7 +310,7 @@ ACT.logUseAlt = (el) => {
 ACT.logSubmit = () => {
   const d = draftOf(); if (!d.name || !String(d.name).trim()) { d.name = 'One-off drink'; }
   const res = SC.commitLog(S, d); if (!res.ok) { renderSheet(); return; }
-  save(); const log = res.log; closeSheet(); render();
+  save(); askPersist(); const log = res.log; closeSheet(); render();
   toast('Logged ' + log.name + ' · ~' + fmt(log.caffeine, 0) + ' mg caffeine (est.)', 'Undo', () => { SC.undoLog(S, log.id); save(); render(); toast('Undone. Stock restored.'); });
 };
 ACT.editLog = (el) => { const l = S.logs.find((x) => x.id === el.dataset.id); openSheet('editLog', { id: l.id, rating: l.rating, note: l.note, personId: l.personId || '' }); };

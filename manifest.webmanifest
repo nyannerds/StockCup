@@ -1,0 +1,16 @@
+{
+  "name": "StockCup – Home coffee and matcha pantry",
+  "short_name": "StockCup",
+  "description": "Track your coffee, matcha and tea pantry, log drinks and see what you can make.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdf4d8",
+  "theme_color": "#4f7339",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

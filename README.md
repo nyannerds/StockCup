@@ -19,6 +19,15 @@ python3 -m http.server 8080   # then open http://localhost:8080 (or your phone v
 Opened straight from a file, everything else works; the photo reader says it is unavailable and you can paste or
 type the text instead (quick-add lines, receipt text and recipe text all work without OCR).
 
+## Put it online (Vercel, free)
+
+1. Push the repo to GitHub (already done) and sign in at vercel.com with GitHub.
+2. **Add New → Project**, import this repo. Framework preset **Other**. `vercel.json` already sets the build command (`node build.js`) and the output directory (`.`).
+3. Deploy. Every pushed branch gets its own preview URL; the production URL updates when you merge into `main`.
+4. Open the URL on your phone. In Profile → **App** you get an install button (Android/desktop) or the iPhone hint (Share → Add to Home Screen). After the first load the app works offline, and the receipt reader works offline after its first use.
+
+Notes: each address (preview, production, a local copy) has its own separate data, because browsers store data per site. Use Export / Import to move it. The Hobby plan is for personal, non-commercial use.
+
 ## Develop
 
 Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` screens, `ocr.js`, `style.css`).
@@ -30,6 +39,7 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 | `tests/parse.test.js` | Quick-add, receipt and recipe-text parsers (R20, R21) on synthetic corpora |
 | `tests/ui.test.js` | Real-browser flows at 360 px: tap counts, split/undo, validation, export/import, offline, 44 px targets, no horizontal scroll, dark mode |
 | `tests/ocr.test.js` | Bundled OCR reads a receipt image offline (needs http) |
+| `tests/pwa.test.js` | Manifest and icons, service worker, installability, offline reload, offline OCR after first use |
 
 ## Design notes
 

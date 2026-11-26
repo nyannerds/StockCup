@@ -264,6 +264,7 @@ VIEWS.more = () => {
     selectField('tempUnit', 'Temperature', [['C', '°C'], ['F', '°F']], S.settings.tempUnit, { change: 'setting' }) +
     '<label class="check"><input type="checkbox" name="imperial" data-change="setting"' + (S.settings.imperial ? ' checked' : '') + '> <span>Also show ounces / fl oz</span></label>' +
     '<label class="f" for="f-currency">Currency symbol</label><input id="f-currency" name="currency" maxlength="3" data-change="setting" value="' + esc(S.settings.currency || '$') + '"></div>';
+  h += appCardHtml();
   h += '<h2>Your data</h2><div class="card stack"><p class="small muted">Everything stays on this device. Use export and import to back up or move to another device. Photos and screenshots are never stored.</p><div class="grid2"><button data-act="exportData">⬇ Export</button><button data-act="importPick">⬆ Import</button></div><input type="file" id="importFile" accept="application/json,.json" class="sr" tabindex="-1" aria-label="Choose a StockCup export file" data-change="importFile">' +
     '<button data-act="addPreset">Starter product list</button><button data-act="restoreBuiltins">Restore built-in recipes</button>' +
     (S.settings.sampleLoaded ? '<button class="danger" data-act="clearSample">Clear the sample pantry</button>' : '<button data-act="loadSample">Load the sample pantry</button>') +
