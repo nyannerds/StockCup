@@ -64,6 +64,11 @@ test('capsule brands and flavours follow the machines owned', () => {
   assert.deepStrictEqual(CAT.brands('capsule', { systems: o }), ['Nespresso']); assert.deepStrictEqual(CAT.brands('capsule', { systems: none }), []);
   const lines = (s) => CAT.products('Nespresso', 'capsule', { systems: s }).map((g) => g.line);
   assert.ok(lines(o).length >= 4 && lines(o).every((l) => /^Original/.test(l))); assert.ok(lines(v).length >= 4 && lines(v).every((l) => /^Vertuo/.test(l))); assert.strictEqual(lines(both).length, lines(o).length + lines(v).length);
+  const sys = (b, c, set) => CAT.systemsFor(b, c, set ? { systems: set } : {}).map((x) => x.system + ':' + x.label);
+  assert.deepStrictEqual(sys('Nespresso', 'capsule', both), ['original:Original', 'vertuo:Vertuo']); assert.deepStrictEqual(sys('Nespresso', 'capsule', o), ['original:Original']); assert.deepStrictEqual(sys('Nespresso', 'capsule', v), ['vertuo:Vertuo']); assert.deepStrictEqual(sys('Nespresso', 'capsule', none), []); assert.deepStrictEqual(sys('Nespresso', 'capsule'), ['original:Original', 'vertuo:Vertuo']);
+  assert.deepStrictEqual(sys('Marukyu Koyamaen', 'matcha', both), [], 'matcha has no machine step'); assert.deepStrictEqual(sys('Lavazza', 'coffee'), []);
+  assert.deepStrictEqual(CAT.products('Nespresso', 'capsule', { systems: o }).map((g) => CAT.lineLabel(g.line)), ['Classics', 'Ispirazione', 'Master Origins', 'Decaffeinato']); assert.ok(CAT.products('Nespresso', 'capsule', { systems: v }).map((g) => CAT.lineLabel(g.line)).every((l) => !/^(Original|Vertuo)/.test(l)));
+  assert.strictEqual(CAT.lineLabel('Vertuo · Mug (230 ml)'), 'Mug (230 ml)'); assert.strictEqual(CAT.lineLabel('Sugar'), 'Sugar');
   assert.deepStrictEqual(CAT.brands('matcha'), ['Aiya', 'Ippodo', 'Kumatcha', 'Marukyu Koyamaen', 'Yamamasa Koyamaen']); assert.deepStrictEqual(CAT.products('Marukyu Koyamaen', 'matcha')[0].items.map((e) => e.name), ['Isuzu', 'Aoarashi', 'Yugen', 'Wako', 'Kinrin', 'Chigi no Shiro']);
   assert.deepStrictEqual(CAT.products('Marukyu Koyamaen', 'milk'), []);
 });

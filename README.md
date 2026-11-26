@@ -3,7 +3,7 @@
 One offline HTML app that keeps track of the coffee and matcha products at home (by brand and pack size,
 sealed vs. opened), deducts stock when a drink is logged, suggests what can be made, scales recipes, estimates
 caffeine and cost per person, handles Nespresso capsules by machine, and imports recipes and receipts.
-No server, accounts or sync. Data lives in the browser (`localStorage`); use Export/Import to move it.
+Works fully offline on one device, with no accounts. Data lives in the browser (`localStorage`); use Export/Import to move it. Optional extras: hosting, household sync and video-link import (below).
 
 ## Run it
 
@@ -77,9 +77,9 @@ Sources are in `src/` (`core.js` logic, `parse.js` text parsers, `ui-*.js` scree
 
 ## Brand lists (dropdowns)
 
-Pantry → ＋ Add → **Enter all the details**: under Category, choose a **Brand**, then a **Product** (a capsule *flavour*, a matcha such as Marukyu Koyamaen → Wako, a coffee line),
+Pantry → ＋ Add → **Enter all the details**: under Category, choose a **Brand**, then (Nespresso only) the **machine**, then a **Product** (a capsule *flavour*, a matcha such as Marukyu Koyamaen → Wako, a coffee line),
 then a **Pack size**. The fields below fill in and stay editable. Every list ends with **Other (type it)**, and brands you type yourself appear under **Your brands** next time.
-Capsule lists only show flavours for the machines you have. Typed lines, labels and receipts ("Marukyu Koyamaen Wako 40g") are matched against the same list.
+For **Nespresso** you first choose the machine, **Original** or **Vertuo**, and then see only that machine's flavours (grouped by range); if you own just one machine it is already chosen. Capsule lists only show flavours for the machines you have. Typed lines, labels and receipts ("Marukyu Koyamaen Wako 40g") are matched against the same list.
 
 The list lives in `src/catalog.js` and is a **hand-compiled starter list, not authoritative**: Nespresso (Original and Vertuo), Marukyu Koyamaen, Yamamasa Koyamaen, Kumatcha, Ippodo, Aiya, Top Creamery (TOP Series syrups), Lavazza, illy, Starbucks and Twinings.
 Names were checked against public listings (brand sites could not be reached when it was written). Numbers are filled only when known; ones recalled but not confirmed are flagged

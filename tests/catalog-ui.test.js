@@ -61,21 +61,34 @@ async function test(n, fn) { try { await fn(); console.log('  ok   ' + n); } cat
     assert.deepStrictEqual((await state(p)).products.map((x) => [x.name, x.size]), [['Okumidori 2.0', 30], ['Honmei', 100], ['Yabukita', 100]]); await ctx.close();
   });
   console.log('capsules and machines');
-  await test('with an Original machine only Original flavours are offered; Livanto fills system, intensity and sleeve size', async () => {
-    const { ctx, p } = await fresh(['original']); await open(p, 'capsule'); assert.deepStrictEqual((await opts(p, 'pk_brand')).filter((o) => /Nespresso/.test(o)), ['Nespresso']); await p.selectOption('#f-pk_brand', 'Nespresso');
-    const g = await groups(p, 'pk_product'); assert.ok(g.length >= 4 && g.every((x) => /^Original/.test(x)), g.join('|')); assert.ok(!(await opts(p, 'pk_product')).includes('Melozio'));
+  await test('Nespresso asks for the machine first: with only an Original machine it is pre-selected and only Original flavours are offered; Livanto fills system, intensity and sleeve size', async () => {
+    const { ctx, p } = await fresh(['original']); await open(p, 'capsule'); assert.deepStrictEqual((await opts(p, 'pk_brand')).filter((o) => /Nespresso/.test(o)), ['Nespresso']); assert.strictEqual(await p.locator('#f-pk_system').count(), 0, 'no machine question before a brand is chosen');
+    await p.selectOption('#f-pk_brand', 'Nespresso'); assert.deepStrictEqual(await opts(p, 'pk_system'), ['Original']); assert.strictEqual(await p.inputValue('#f-pk_system'), 'original'); assert.strictEqual(await val(p, 'system'), 'original');
+    const g = await groups(p, 'pk_product'); assert.deepStrictEqual(g, ['Classics', 'Ispirazione', 'Master Origins', 'Decaffeinato']); assert.ok(!(await opts(p, 'pk_product')).includes('Melozio'));
+    assert.ok((await opts(p, 'pk_product')).includes('Livanto'), 'flavours are listed without repeating the machine');
     await p.selectOption('#f-pk_product', { label: 'Livanto' }); assert.deepStrictEqual([await val(p, 'name'), await val(p, 'system'), await val(p, 'intensity'), await val(p, 'size')], ['Original Livanto', 'original', '6', '10']); assert.ok(/approximate/.test(await p.locator('.pickbox').innerText()));
     await p.fill('#f-sleeves', '2'); await p.fill('#f-loose', '3'); await p.click('[data-act=saveProduct]'); const pr = (await state(p)).products[0]; assert.strictEqual(pr.count, 23); assert.strictEqual(pr.capsule.intensity, 6); await ctx.close();
   });
-  await test('with a Vertuo machine only Vertuo flavours show; unknown intensity and size must be filled in, never guessed', async () => {
-    const { ctx, p } = await fresh(['vertuo']); await open(p, 'capsule'); await p.selectOption('#f-pk_brand', 'Nespresso'); const g = await groups(p, 'pk_product'); assert.ok(g.length >= 4 && g.every((x) => /^Vertuo/.test(x)), g.join('|'));
+  await test('with only a Vertuo machine, Vertuo is pre-selected and only Vertuo flavours show; unknown intensity and size must be filled in, never guessed', async () => {
+    const { ctx, p } = await fresh(['vertuo']); await open(p, 'capsule'); await p.selectOption('#f-pk_brand', 'Nespresso'); assert.deepStrictEqual(await opts(p, 'pk_system'), ['Vertuo']); assert.strictEqual(await val(p, 'system'), 'vertuo');
+    const g = await groups(p, 'pk_product'); assert.ok(g.length >= 4 && g.every((x) => !/^(Original|Vertuo)/.test(x)), g.join('|')); assert.ok(g.includes('Mug (230 ml)') && g.includes('Double Espresso (80 ml)') && !g.includes('Classics'));
     await p.selectOption('#f-pk_product', { label: 'Melozio' }); assert.deepStrictEqual([await val(p, 'system'), await val(p, 'intensity'), await val(p, 'size')], ['vertuo', '', '']); assert.deepStrictEqual((await opts(p, 'pk_size')).slice(1, 3), ['8 capsules', '10 capsules']);
     await p.click('[data-act=saveProduct]'); const t = await p.locator('#overlay .body').innerText(); assert.ok(/Required/.test(t)); assert.ok(/Printed on the sleeve/.test(t)); assert.strictEqual((await state(p)).products.length, 0);
     await p.selectOption('#f-pk_size', '10'); await p.fill('#f-intensity', '7'); await p.fill('#f-sleeves', '1'); await p.click('[data-act=saveProduct]'); const pr = (await state(p)).products[0]; assert.deepStrictEqual([pr.name, pr.capsule.system, pr.capsule.intensity, pr.count], ['Vertuo Melozio', 'vertuo', 7, 10]); await ctx.close();
   });
-  await test('double-espresso capsules carry 2 shots; with both machines both families are listed', async () => {
-    const { ctx, p } = await fresh(['original', 'vertuo']); await open(p, 'capsule'); await p.selectOption('#f-pk_brand', 'Nespresso'); const g = await groups(p, 'pk_product'); assert.ok(g.some((x) => /^Original/.test(x)) && g.some((x) => /^Vertuo/.test(x)));
-    await p.selectOption('#f-pk_product', { label: 'Double Espresso Scuro' }); assert.deepStrictEqual([await val(p, 'shots'), await val(p, 'cupSize')], ['2', '80']); await ctx.close();
+  await test('with both machines you choose Original or Vertuo first, then see only that machine\'s flavours; switching clears the flavour; double-espresso capsules carry 2 shots', async () => {
+    const { ctx, p } = await fresh(['original', 'vertuo']); await open(p, 'capsule'); await p.selectOption('#f-pk_brand', 'Nespresso');
+    assert.deepStrictEqual(await opts(p, 'pk_system'), ['Choose Original or Vertuo…', 'Original', 'Vertuo']); assert.strictEqual(await p.inputValue('#f-pk_system'), ''); assert.strictEqual(await p.locator('#f-pk_product').count(), 0, 'no flavour list until the machine is chosen');
+    await p.selectOption('#f-pk_system', 'original'); assert.deepStrictEqual(await groups(p, 'pk_product'), ['Classics', 'Ispirazione', 'Master Origins', 'Decaffeinato']); assert.ok(!(await opts(p, 'pk_product')).includes('Solelio'));
+    await p.selectOption('#f-pk_product', { label: 'Livanto' }); assert.deepStrictEqual([await val(p, 'name'), await val(p, 'system'), await val(p, 'intensity')], ['Original Livanto', 'original', '6']);
+    await p.selectOption('#f-pk_system', 'vertuo'); assert.deepStrictEqual([await val(p, 'name'), await val(p, 'intensity'), await val(p, 'system')], ['', '', 'vertuo'], 'the Original flavour is cleared'); assert.strictEqual(await p.inputValue('#f-pk_product'), '');
+    const g = await groups(p, 'pk_product'); assert.ok(g.includes('Mug (230 ml)') && !g.includes('Classics')); assert.ok(!(await opts(p, 'pk_product')).includes('Livanto'));
+    await p.selectOption('#f-pk_product', { label: 'Double Espresso Scuro' }); assert.deepStrictEqual([await val(p, 'shots'), await val(p, 'cupSize'), await val(p, 'name')], ['2', '80', 'Vertuo Double Espresso Scuro']);
+    await p.selectOption('#f-pk_brand', 'Nespresso'); assert.strictEqual(await p.inputValue('#f-pk_system'), '', 'choosing the brand again starts the machine question over'); assert.strictEqual(await val(p, 'name'), ''); await ctx.close();
+  });
+  await test('brands that are not machine-specific (matcha, coffee) have no machine question', async () => {
+    const { ctx, p } = await fresh(['original', 'vertuo']); await open(p); await p.selectOption('#f-pk_brand', 'Marukyu Koyamaen'); assert.strictEqual(await p.locator('#f-pk_system').count(), 0); assert.ok(await p.locator('#f-pk_product').count());
+    await p.selectOption('#f-category', 'coffee'); await p.selectOption('#f-pk_brand', 'Lavazza'); assert.strictEqual(await p.locator('#f-pk_system').count(), 0); assert.ok(await p.locator('#f-pk_product').count()); await ctx.close();
   });
   await test('quick-add of a catalogue capsule asks for the intensity instead of guessing, then saves', async () => {
     const { ctx, p } = await fresh(['vertuo']); await p.click('nav [data-page=pantry]'); await p.click('[data-act=addMenu]'); await p.click('[data-act=openQuickAdd]'); await p.fill('#qa', 'Nespresso Vertuo Melozio 10 caps x2'); await p.click('[data-act=qaParse]');

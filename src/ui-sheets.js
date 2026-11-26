@@ -34,7 +34,7 @@ function openProductForm(o) {
     f = { category: p.category, brand: p.brand, name: p.name, size: p.size, unit: p.unit, price: p.price === null ? '' : p.price, dairy: p.dairy, density: p.density, shelfLifeDays: p.shelfLifeDays === null ? '' : p.shelfLifeDays, caffeine: p.caffeine === null ? '' : p.caffeine,
       system: p.capsule ? p.capsule.system : 'original', intensity: p.capsule ? p.capsule.intensity : '', cupSize: p.capsule && p.capsule.cupSize ? p.capsule.cupSize : '', shots: p.capsule ? p.capsule.shots : 1, gramsPerShot: p.gramsPerShot || SC.GRAMS_PER_SHOT, usual: !!p.usual };
   } else f = Object.assign(productDefaults(o.category || (o.f && o.f.category) || 'matcha'), o.f || {});
-  openSheet('product', { id: id, f: f, errors: {}, pick: { brand: '', product: '', size: '' } });
+  openSheet('product', { id: id, f: f, errors: {}, pick: { brand: '', system: '', product: '', size: '' } });
 }
 SHEETS.product = (d) => {
   const f = d.f, e = d.errors, isNew = !d.id, cat = f.category, C = SC.CATEGORIES[cat] || SC.CATEGORIES.other, isCap = cat === 'capsule';
@@ -81,29 +81,42 @@ function pickBrandLists(cat) {
   return { catalog: catalog, mine: mine.sort((a, b) => a.localeCompare(b)) };
 }
 function pickHtml(d) {
-  const f = d.f, cat = f.category; const pk = d.pick || (d.pick = { brand: '', product: '', size: '' }); const lists = pickBrandLists(cat);
+  const f = d.f, cat = f.category; const pk = d.pick || (d.pick = { brand: '', system: '', product: '', size: '' }); const lists = pickBrandLists(cat);
   if (!lists.catalog.length && !lists.mine.length) return '';
   const opt = (v, t, cur) => '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(t) + '</option>';
   const sel = (name, label, inner) => '<label class="f" for="f-' + name + '">' + esc(label) + '</label><select id="f-' + name + '" name="' + name + '" data-change="pfPick">' + inner + '</select>';
   let h = '<div class="pickbox"><div class="small muted" style="margin-top:8px">Pick from the list, or choose “Other” and type it below.</div>' +
     sel('pk_brand', 'Brand', opt('', 'Choose a brand…', pk.brand) + lists.catalog.map((b) => opt(b, b, pk.brand)).join('') + (lists.mine.length ? '<optgroup label="Your brands">' + lists.mine.map((b) => opt(b, b, pk.brand)).join('') + '</optgroup>' : '') + opt('__other', 'Other (type it)', pk.brand));
   if (lists.catalog.indexOf(pk.brand) >= 0) {
-    const groups = CATALOG.products(pk.brand, cat, pkSystems(cat)); const cap = cat === 'capsule';
-    h += sel('pk_product', cap ? 'Flavour' : 'Product', opt('', cap ? 'Choose a flavour…' : 'Choose a product…', pk.product) + groups.map((g) => '<optgroup label="' + esc(g.line) + '">' + g.items.map((e) => opt(e.id, e.name, pk.product)).join('') + '</optgroup>').join('') + opt('__other', 'Other (type it)', pk.product));
-    const e = CATALOG.byId(pk.product); const unit = SC.CATEGORIES[cat].unit;
-    if (e && e.sizes && (e.sizes.length > 1 || e.sizesTypical)) h += sel('pk_size', cap ? 'Capsules per sleeve' : 'Pack size', opt('', 'Choose a size…', pk.size) + e.sizes.map((s) => opt(String(s), s + (cap ? ' capsules' : ' ' + unit), pk.size)).join('') + opt('__other', 'Other (type it)', pk.size));
-    const hint = e ? CATALOG.hint(e) : ''; if (hint) h += '<div class="small" style="color:var(--warn);margin-top:6px">' + esc(hint) + '</div>';
+    // brands sold for more than one machine (Nespresso) ask Original or Vertuo first, then show only that machine's flavours
+    const systems = CATALOG.systemsFor(pk.brand, cat, pkSystems(cat)); let only = null;
+    if (systems.length) {
+      if (systems.length === 1) { if (pk.system !== systems[0].system) { pk.system = systems[0].system; f.system = pk.system; } } else if (!systems.some((x) => x.system === pk.system)) pk.system = '';
+      h += sel('pk_system', 'Machine', (systems.length > 1 ? opt('', 'Choose Original or Vertuo…', pk.system) : '') + systems.map((x) => opt(x.system, x.label, pk.system)).join(''));
+      only = pk.system || null;
+    }
+    if (!systems.length || only) {
+      const groups = CATALOG.products(pk.brand, cat, only ? { systems: new Set([only]) } : pkSystems(cat)); const cap = cat === 'capsule';
+      h += sel('pk_product', cap ? 'Flavour' : 'Product', opt('', cap ? 'Choose a flavour…' : 'Choose a product…', pk.product) + groups.map((g) => '<optgroup label="' + esc(only ? CATALOG.lineLabel(g.line) : g.line) + '">' + g.items.map((e) => opt(e.id, only ? e.name : CATALOG.displayName(e), pk.product)).join('') + '</optgroup>').join('') + opt('__other', 'Other (type it)', pk.product));
+      const e = CATALOG.byId(pk.product); const unit = SC.CATEGORIES[cat].unit;
+      if (e && e.sizes && (e.sizes.length > 1 || e.sizesTypical)) h += sel('pk_size', cap ? 'Capsules per sleeve' : 'Pack size', opt('', 'Choose a size…', pk.size) + e.sizes.map((s) => opt(String(s), s + (cap ? ' capsules' : ' ' + unit), pk.size)).join('') + opt('__other', 'Other (type it)', pk.size));
+      const hint = e ? CATALOG.hint(e) : ''; if (hint) h += '<div class="small" style="color:var(--warn);margin-top:6px">' + esc(hint) + '</div>';
+    }
   }
   return h + '</div>';
 }
 CHG.pfPick = (el) => {
-  syncProductForm(); const d = SHEET.data; const f = d.f; const pk = d.pick = d.pick || { brand: '', product: '', size: '' }; const v = el.value;
+  syncProductForm(); const d = SHEET.data; const f = d.f; const pk = d.pick = d.pick || { brand: '', system: '', product: '', size: '' }; const v = el.value;
   const clear = (...ks) => ks.forEach((k) => { f[k] = ''; });
+  const resetDefaults = () => { const C = SC.CATEGORIES[f.category]; f.size = C.size; f.shelfLifeDays = C.shelf === null ? '' : C.shelf; };
   if (el.name === 'pk_brand') {
     const prev = pk.brand; const wasCatalogue = pickBrandLists(f.category).catalog.indexOf(prev) >= 0;
     if (wasCatalogue && f.brand === prev) clear('brand'); if (pk.product) { clear('name', 'intensity', 'cupSize', 'caffeine'); if (f.category === 'capsule') f.shots = 1; }
-    d.pick = { brand: v, product: '', size: '' }; if (v && v !== '__other') f.brand = v;
-    if (f.category !== 'capsule' && pk.product) { const C = SC.CATEGORIES[f.category]; f.size = C.size; f.shelfLifeDays = C.shelf === null ? '' : C.shelf; }
+    d.pick = { brand: v, system: '', product: '', size: '' }; if (v && v !== '__other') f.brand = v;
+    if (f.category !== 'capsule' && pk.product) resetDefaults();
+  } else if (el.name === 'pk_system') {
+    if (pk.product) { clear('name', 'intensity', 'cupSize', 'caffeine'); f.shots = 1; resetDefaults(); } // the flavour belonged to the other machine
+    pk.system = v; pk.product = ''; pk.size = ''; if (v) f.system = v;
   } else if (el.name === 'pk_product') {
     if (v === '__other' || v === '') { if (pk.product && pk.product !== '__other') clear('name', 'intensity', 'cupSize', 'caffeine'); pk.product = v; pk.size = ''; }
     else { const entry = CATALOG.byId(v); if (entry) { const F = CATALOG.toForm(entry); PK_FIELDS.forEach((k) => { f[k] = F[k]; }); pk.product = v; pk.size = F.size === '' ? '' : String(F.size); } }
@@ -115,7 +128,7 @@ CHG.pfPick = (el) => {
 CHG.pfCat = (el) => {
   syncProductForm(); const d = SHEET.data; const f = d.f; const nf = productDefaults(el.value);
   if (d.pick && (d.pick.brand || d.pick.product)) { ['brand', 'name', 'intensity', 'cupSize', 'caffeine'].forEach((k) => { f[k] = ''; }); } // the list pick belonged to the old category
-  d.pick = { brand: '', product: '', size: '' };
+  d.pick = { brand: '', system: '', product: '', size: '' };
   ['size', 'unit', 'dairy', 'density', 'shelfLifeDays', 'shots', 'gramsPerShot'].forEach((k) => { f[k] = nf[k]; }); f.category = el.value; f.system = f.system || nf.system; d.errors = {}; renderSheet();
 };
 CHG.pfMode = () => { syncProductForm(); renderSheet(); };

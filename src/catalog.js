@@ -113,6 +113,18 @@ const CATALOG = (function (SC) {
     });
     return lines;
   }
+  // Machine systems a brand's products come in (Nespresso: Original and Vertuo), limited to the ones the user owns when opts.systems is given.
+  // Brands without system-tagged products (matcha, coffee, tea, syrup) return [] and need no machine step.
+  const SYSTEM_LABEL = { original: 'Original', vertuo: 'Vertuo' };
+  function systemsFor(b, category, opts) {
+    opts = opts || {}; const found = {};
+    entries.forEach((e) => {
+      if (e.brand !== b || e.category !== category || !e.system) return; if (opts.systems && !opts.systems.has(e.system)) return; found[e.system] = true;
+    });
+    return Object.keys(SYSTEM_LABEL).filter((k) => found[k]).map((k) => ({ system: k, label: SYSTEM_LABEL[k] }));
+  }
+  // "Original · Classics" -> "Classics": once the machine is chosen, the group names no longer repeat it.
+  const lineLabel = (line) => String(line).replace(/^(Original|Vertuo) · /, '');
   const byId = (id) => entries.find((e) => e.id === id) || null;
   const defaultSize = (e) => (e.sizes && e.sizes.length === 1 && !e.sizesTypical ? e.sizes[0] : '');
   function displayName(e) { return e.system ? (e.system === 'original' ? 'Original ' : 'Vertuo ') + e.name : e.name; }
@@ -135,6 +147,6 @@ const CATALOG = (function (SC) {
     return parts.length ? 'Check your box: ' + parts.join('; ') + '.' : '';
   }
   function allBrandNames() { return Object.keys(brandInfo).sort((a, b) => a.localeCompare(b)); }
-  return { entries, brandInfo, brands, products, byId, toForm, hint, displayName, allBrandNames };
+  return { entries, brandInfo, brands, products, systemsFor, lineLabel, byId, toForm, hint, displayName, allBrandNames };
 })(typeof module !== 'undefined' ? require('./core.js') : SC);
 if (typeof module !== 'undefined') module.exports = CATALOG;
